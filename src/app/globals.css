@@ -1,19 +1,18 @@
-@import "tailwindcss";
-
-@theme {
-  --color-brand-green: #10b981;
-  --color-brand-dark: #0a0a0a;
-  --color-brand-light: #ffffff;
-  --color-brand-muted: #f4f4f5;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  direction: rtl;
+  --brand-green: #10b981;
+  --brand-dark: #0a0a0a;
+  --brand-light: #ffffff;
+  --brand-muted: #f4f4f5;
 }
 
 body {
-  background-color: var(--color-brand-muted);
-  color: var(--color-brand-dark);
-  font-family: system-ui, -apple-system, sans-serif;
+  background-color: #f4f4f5;
+  color: #0a0a0a;
+  direction: rtl;
   margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
 }
