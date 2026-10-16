@@ -1,65 +1,58 @@
-import Image from "next/image";
 import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen bg-brand-muted font-sans" dir="rtl">
+    <div className="min-h-screen bg-[#f4f4f5] flex flex-col">
       {/* Header */}
-      <header className="p-6 flex justify-between items-center bg-white shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-brand-green rounded-lg shadow-lg shadow-brand-green/20"></div>
-          <span className="text-xl font-black text-brand-dark tracking-tight">پنل مدیریت پزشکی</span>
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#10b981] rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center">
+              <span className="text-white font-black text-xl">M</span>
+            </div>
+            <span className="text-[#0a0a0a] font-black text-xl tracking-tight">پنل مدیریت پزشکی</span>
+          </div>
+          <Link href="/login" className="bg-[#0a0a0a] text-white px-8 py-2.5 rounded-full font-bold hover:bg-[#10b981] transition-all transform hover:scale-105 active:scale-95 shadow-md">
+            ورود اعضا
+          </Link>
         </div>
-        <Link 
-          href="/login" 
-          className="bg-brand-dark text-white px-6 py-2 rounded-full font-bold hover:bg-brand-green transition-all"
-        >
-          ورود اعضا
-        </Link>
       </header>
 
-      <main className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+      <main className="flex-1 flex flex-col items-center">
         {/* Hero Section */}
-        <div className="max-w-2xl">
-          <h1 className="text-5xl md:text-6xl font-black text-brand-dark leading-tight mb-6">
-            مدیریت هوشمند <span className="text-brand-green">نوبت‌دهی</span> و اتاق عمل
+        <section className="py-20 px-6 text-center max-w-4xl">
+          <h1 className="text-5xl md:text-7xl font-black text-[#0a0a0a] leading-[1.2] mb-8">
+            مدیریت هوشمند <br/>
+            <span className="text-[#10b981]">نوبت‌دهی و اتاق عمل</span>
           </h1>
-          <p className="text-zinc-600 text-lg leading-relaxed mb-10">
-            سیستم یکپارچه مدیریت بیماران، برنامه‌ریزی جراحی‌ها و مشاوره آنلاین. 
-            طراحی شده برای دقت بالا و امنیت حداکثری اطلاعات پزشکی.
+          <p className="text-gray-500 text-lg md:text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
+            یکپارچه‌سازی کامل برنامه‌های جراحی، مشاوره‌های آنلاین و پرونده بیماران با امنیت فوق‌العاده در بستر Cloudflare.
           </p>
-
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/login"
-              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-brand-dark px-10 text-white font-bold transition-all hover:bg-brand-green hover:scale-105 active:scale-95 shadow-xl shadow-brand-dark/10"
-            >
-              ورود به پنل ویزیتورها
+            <Link href="/login" className="bg-[#10b981] text-white px-10 py-5 rounded-[2rem] font-black text-lg shadow-2xl shadow-emerald-200 hover:brightness-110 transition-all">
+              شروع به کار (پنل ویزیتور)
             </Link>
-            <div className="flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-brand-dark/10 bg-white px-10 text-brand-dark font-bold">
-              نسخه ۱.۰.۰
-            </div>
           </div>
-        </div>
+        </section>
 
         {/* Feature Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-20 w-full max-w-5xl">
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full px-6 pb-20">
           {[
-            { title: "نوبت‌دهی جراحی", desc: "مدیریت زمان‌بندی اتاق عمل", icon: "🏥" },
-            { title: "مشاوره آنلاین", desc: "تعریف و مدیریت تایم‌های مشاوره", icon: "💬" },
-            { title: "آرشیو تصاویر", desc: "بارگذاری ایمن عکس‌های قبل و بعد", icon: "📸" },
+            { t: "نوبت‌دهی جراحی", d: "برنامه‌ریزی دقیق اتاق عمل و لیست انتظار", i: "🏥" },
+            { t: "مشاوره آنلاین", d: "مدیریت زمان‌های مشاوره و ویزیت", i: "💬" },
+            { t: "آرشیو تصاویر", d: "ذخیره‌سازی ایمن عکس‌های قبل و بعد", i: "📸" }
           ].map((item, index) => (
-            <div key={index} className="bg-white p-8 rounded-3xl border border-zinc-100 text-right hover:border-brand-green transition-colors">
-              <div className="text-3xl mb-4">{item.icon}</div>
-              <h3 className="text-xl font-bold text-brand-dark mb-2">{item.title}</h3>
-              <p className="text-zinc-500 text-sm">{item.desc}</p>
+            <div key={index} className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-2xl transition-all group">
+              <div className="text-4xl mb-6 group-hover:scale-110 transition-transform">{item.i}</div>
+              <h3 className="text-xl font-bold text-[#0a0a0a] mb-3">{item.t}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">{item.d}</p>
             </div>
           ))}
-        </div>
+        </section>
       </main>
 
-      <footer className="p-8 text-center text-zinc-400 text-xs">
-        © ۲۰۲۴ تمامی حقوق برای مدیریت مطب محفوظ است | امنیت تضمین شده توسط Cloudflare
+      <footer className="py-10 text-center text-gray-400 text-xs border-t border-gray-200 bg-white">
+        © ۲۰۲۴ مدیریت مطب | امنیت تضمین شده توسط لایه‌های دفاعی Cloudflare
       </footer>
     </div>
   );
