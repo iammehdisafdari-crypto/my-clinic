@@ -6,14 +6,15 @@ export async function POST(request: Request) {
     const { username, password } = await request.json();
     const { env } = getRequestContext();
     const db = env.DB;
-    
-    // جستجو بر اساس یوزرنیم یا ایمیل
+
+    // جستجو: اگر ورودی با username یا email مطابقت داشت
     const user = await db.prepare("SELECT * FROM users WHERE username = ? OR email = ?")
       .bind(username, username).first();
 
     if (!user || user.password !== password) {
-      return new Response(JSON.stringify({ success: false, error: "اطلاعات ورود اشتباه است" }), { status: 401 });
+      return new Response(JSON.stringify({ success: false, error: "اطلاعات ورود نادرست است" }), { status: 401 });
     }
+
     return new Response(JSON.stringify({ success: true, role: user.role }));
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: "خطای سرور" }), { status: 500 });
