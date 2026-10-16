@@ -1,16 +1,32 @@
 "use client";
-import { useState } from "react";
+import React, { useState, useEffect } from 'react';
 import { useRouter } from "next/navigation";
+import './panda.css'; // استایل‌ها را در فایل جداگانه می‌گذاریم
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [isWrong, setIsWrong] = useState(false);
+  const [eyePos, setEyePos] = useState({ x: 0, y: 0 });
   const router = useRouter();
+
+  // انیمیشن حرکت چشم پاندا با موس
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const dw = window.innerWidth / 15;
+      const dh = window.innerHeight / 15;
+      setEyePos({ x: e.pageX / dw, y: e.pageY / dh });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsWrong(false);
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -22,50 +38,70 @@ export default function LoginPage() {
       const data = await res.json();
 
       if (data.success) {
-        // هدایت کاربر بر اساس نقش
-        if (data.role === "visitor") {
-          router.push("/dashboard/visitor");
-        } else {
-          router.push("/dashboard/manager");
-        }
+        router.push(data.role === "visitor" ? "/dashboard/visitor" : "/dashboard/manager");
       } else {
-        setError(data.error || "خطا در ورود");
+        setError(data.error || "نام کاربری یا رمز عبور اشتباه است");
+        setIsWrong(true);
+        setTimeout(() => setIsWrong(false), 3000);
       }
     } catch (err) {
       setError("ارتباط با سرور برقرار نشد");
+      setIsWrong(true);
     }
   };
 
   return (
-    <div style={{ backgroundColor: "#f4f4f5", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "sans-serif" }} dir="rtl">
-      <div style={{ backgroundColor: "white", padding: "40px", borderRadius: "24px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)", width: "100%", maxWidth: "400px", border: "1px solid #e5e7eb" }}>
-        <h2 style={{ fontSize: "24px", fontWeight: "900", color: "#0a0a0a", textAlign: "center", marginBottom: "8px" }}>ورود به پنل مطب</h2>
-        <p style={{ textAlign: "center", color: "#71717a", fontSize: "14px", marginBottom: "32px" }}>لطفاً نام کاربری و رمز عبور خود را وارد کنید</p>
+    <div className="login-container">
+      <div className={`panda ${isPasswordFocused ? 'up' : ''}`}>
+        <div className="ear"></div>
+        <div className="face">
+          <div className="eye-shade"></div>
+          <div className="eye-white">
+            <div className="eye-ball" style={{ width: `${eyePos.x}px`, height: `${eyePos.y}px` }}></div>
+          </div>
+          <div className="eye-shade rgt"></div>
+          <div className="eye-white rgt">
+            <div className="eye-ball" style={{ width: `${eyePos.x}px`, height: `${eyePos.y}px` }}></div>
+          </div>
+          <div className="nose"></div>
+          <div className="mouth"></div>
+        </div>
+        <div className="body"></div>
+        <div className="foot"><div className="finger"></div></div>
+        <div className="foot rgt"><div className="finger"></div></div>
+      </div>
+
+      <form onSubmit={handleLogin} className={`${isPasswordFocused ? 'up' : ''} ${isWrong ? 'wrong-entry' : ''}`}>
+        <div className="hand"></div>
+        <div className="hand rgt"></div>
+        <h1>ورود پزشکان</h1>
         
-        {error && <p style={{ color: "#ef4444", backgroundColor: "#fef2f2", padding: "10px", borderRadius: "12px", fontSize: "13px", textAlign: "center", marginBottom: "20px", border: "1px solid #fee2e2" }}>{error}</p>}
-        
-        <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div className="form-group">
           <input 
             type="text" 
-            placeholder="نام کاربری" 
+            required 
+            className="form-control" 
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            style={{ padding: "16px", borderRadius: "16px", border: "1px solid #e5e7eb", backgroundColor: "#f9fafb", outline: "none" }} 
-            required
           />
+          <label className="form-label">نام کاربری</label>
+        </div>
+
+        <div className="form-group">
           <input 
             type="password" 
-            placeholder="رمز عبور" 
+            required 
+            className="form-control"
+            onFocus={() => setIsPasswordFocused(true)}
+            onBlur={() => setIsPasswordFocused(false)}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{ padding: "16px", borderRadius: "16px", border: "1px solid #e5e7eb", backgroundColor: "#f9fafb", outline: "none" }} 
-            required
           />
-          <button type="submit" style={{ padding: "16px", backgroundColor: "#0a0a0a", color: "white", border: "none", borderRadius: "16px", fontWeight: "bold", cursor: "pointer", marginTop: "10px", transition: "0.3s" }}>
-            ورود به سیستم
-          </button>
-        </form>
-      </div>
+          <label className="form-label">رمز عبور</label>
+          {error && <p className="alert-bubble">{error}</p>}
+          <button className="btn-login">ورود به پنل</button>
+        </div>
+      </form>
     </div>
   );
 }
