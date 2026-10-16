@@ -7,21 +7,23 @@ export async function POST(request: Request) {
     const { env } = getRequestContext();
     const db = env.DB;
 
-    // ۱. بررسی تکراری بودن ایمیل (شرط اصلی)
-    const existingEmail = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
-    if (existingEmail) {
-      return new Response(JSON.stringify({ success: false, error: "این ایمیل قبلاً ثبت‌نام شده است" }), { status: 400 });
+    // ۱. بررسی اینکه آیا این ایمیل قبلاً ثبت شده یا نه
+    const existingUser = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+    
+    if (existingUser) {
+      return new Response(JSON.stringify({ success: false, error: "این ایمیل قبلاً ثبت‌نام کرده است" }), { status: 400 });
     }
 
-    // ۲. تعیین یوزرنیم (اگر کاربر وارد نکرد، از بخش قبل از @ ایمیل استفاده کن)
-    const finalUsername = username || email.split('@')[0] + Math.floor(Math.random() * 1000);
+    // ۲. ساخت یک نام کاربری خودکار (اگر کاربر وارد نکرده بود)
+    const finalUsername = username || email.split('@')[0];
 
-    // ۳. ذخیره در دیتابیس
+    // ۳. ثبت کاربر جدید در دیتابیس
+    // نقش پیش‌فرض را 'visitor' می‌گذاریم (طبق خواسته شما برای نقش شماره ۱)
     await db.prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'visitor')")
       .bind(finalUsername, email, password).run();
 
-    return new Response(JSON.stringify({ success: true }));
+    return new Response(JSON.stringify({ success: true, message: "حساب کاربری شما ساخته شد" }));
   } catch (error: any) {
-    return new Response(JSON.stringify({ success: false, error: "خطا در سیستم ثبت‌نام" }), { status: 500 });
+    return new Response(JSON.stringify({ success: false, error: "خطا در ثبت‌نام: " + error.message }), { status: 500 });
   }
 }
