@@ -7,25 +7,21 @@ export async function POST(request: Request) {
     const { env } = getRequestContext();
     const db = env.DB;
 
-    // ۱. بررسی دقیق تکراری بودن یوزرنیم
-    const checkUser = await db.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
-    if (checkUser) {
-      return new Response(JSON.stringify({ success: false, error: "این نام کاربری قبلاً انتخاب شده است" }), { status: 400 });
+    // ۱. بررسی تکراری بودن ایمیل (شرط اصلی)
+    const existingEmail = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+    if (existingEmail) {
+      return new Response(JSON.stringify({ success: false, error: "این ایمیل قبلاً ثبت‌نام شده است" }), { status: 400 });
     }
 
-    // ۲. بررسی دقیق تکراری بودن ایمیل
-    const checkEmail = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
-    if (checkEmail) {
-      return new Response(JSON.stringify({ success: false, error: "این ایمیل قبلاً ثبت شده است" }), { status: 400 });
-    }
+    // ۲. تعیین یوزرنیم (اگر کاربر وارد نکرد، از بخش قبل از @ ایمیل استفاده کن)
+    const finalUsername = username || email.split('@')[0] + Math.floor(Math.random() * 1000);
 
-    // ۳. اگر هیچکدام تکراری نبود، ثبت‌نام انجام شود
+    // ۳. ذخیره در دیتابیس
     await db.prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'visitor')")
-      .bind(username || null, email, password).run();
+      .bind(finalUsername, email, password).run();
 
     return new Response(JSON.stringify({ success: true }));
   } catch (error: any) {
-    console.error("Register Error:", error);
-    return new Response(JSON.stringify({ success: false, error: "خطا در دیتابیس: " + error.message }), { status: 500 });
+    return new Response(JSON.stringify({ success: false, error: "خطا در سیستم ثبت‌نام" }), { status: 500 });
   }
 }
