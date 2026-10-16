@@ -7,12 +7,25 @@ export async function POST(request: Request) {
     const { env } = getRequestContext();
     const db = env.DB;
 
-    // ثبت یوزر جدید با ایمیل و یوزرنیم (نقش پیش‌فرض: ویزیتور)
+    // ۱. بررسی دقیق تکراری بودن یوزرنیم
+    const checkUser = await db.prepare("SELECT id FROM users WHERE username = ?").bind(username).first();
+    if (checkUser) {
+      return new Response(JSON.stringify({ success: false, error: "این نام کاربری قبلاً انتخاب شده است" }), { status: 400 });
+    }
+
+    // ۲. بررسی دقیق تکراری بودن ایمیل
+    const checkEmail = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
+    if (checkEmail) {
+      return new Response(JSON.stringify({ success: false, error: "این ایمیل قبلاً ثبت شده است" }), { status: 400 });
+    }
+
+    // ۳. اگر هیچکدام تکراری نبود، ثبت‌نام انجام شود
     await db.prepare("INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'visitor')")
-      .bind(username, email, password).run();
+      .bind(username || null, email, password).run();
 
     return new Response(JSON.stringify({ success: true }));
-  } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: "این ایمیل یا نام کاربری قبلاً استفاده شده است" }), { status: 400 });
+  } catch (error: any) {
+    console.error("Register Error:", error);
+    return new Response(JSON.stringify({ success: false, error: "خطا در دیتابیس: " + error.message }), { status: 500 });
   }
 }
