@@ -3,20 +3,31 @@ export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
-    const { username, password } = await request.json(); // ورودی فیلد اول
+    const { username, password } = await request.json(); // اینجا username ورودیِ فیلد اول است (ایمیل)
     const { env } = getRequestContext();
     const db = env.DB;
 
-    // جستجو: هم در ستون ایمیل و هم در ستون یوزرنیم چک می‌کند
+    // جستجوی کاربر در کل جدول بر اساس ایمیل یا نام کاربری
     const user = await db.prepare("SELECT * FROM users WHERE email = ? OR username = ?")
       .bind(username, username).first();
 
-    if (!user || user.password !== password) {
-      return new Response(JSON.stringify({ success: false, error: "ایمیل یا رمز عبور اشتباه است" }), { status: 401 });
+    if (!user) {
+      return new Response(JSON.stringify({ success: false, error: "حساب کاربری با این مشخصات یافت نشد" }), { status: 401 });
     }
 
-    return new Response(JSON.stringify({ success: true, role: user.role, username: user.username }));
-  } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: "خطا در برقراری ارتباط با دیتابیس" }), { status: 500 });
+    // چک کردن پسورد
+    if (user.password !== password) {
+      return new Response(JSON.stringify({ success: false, error: "رمز عبور اشتباه است" }), { status: 401 });
+    }
+
+    // ورود موفقیت‌آمیز
+    return new Response(JSON.stringify({ 
+      success: true, 
+      role: user.role, 
+      username: user.username,
+      email: user.email 
+    }));
+  } catch (error: any) {
+    return new Response(JSON.stringify({ success: false, error: "خطا در برقراری ارتباط" }), { status: 500 });
   }
 }
