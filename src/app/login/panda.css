@@ -1,1 +1,60 @@
+:root {
+  --primary: #10b981; /* سبز زمردی برند شما */
+}
 
+.login-container {
+  background: #f4f4f5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding-top: 50px;
+}
+
+.panda { position: relative; width: 200px; margin: 0 auto; transition: 0.3s; }
+.face { width: 200px; height: 200px; background: #fff; border-radius: 100%; margin: 50px auto; box-shadow: 0 10px 15px rgba(0,0,0,.15); z-index: 50; position: relative; }
+.ear { position: absolute; width: 80px; height: 80px; background: #000; z-index: 5; border: 10px solid #fff; left: -15px; top: -15px; border-radius: 100%; }
+.ear:after { content: ''; position: absolute; width: 80px; height: 80px; background: #000; border: 10px solid #fff; left: 125px; top: -10px; border-radius: 100%; }
+.eye-shade { background: #000; width: 50px; height: 80px; margin: 10px; position: absolute; top: 35px; left: 25px; transform: rotate(220deg); border-radius: 25px / 20px 30px 35px 40px; }
+.eye-shade.rgt { transform: rotate(140deg); left: 105px; }
+.eye-white { position: absolute; width: 30px; height: 30px; border-radius: 100%; background: #fff; z-index: 500; left: 40px; top: 80px; overflow: hidden; }
+.eye-white.rgt { right: 40px; left: auto; }
+.eye-ball { position: absolute; width: 10px; height: 10px; left: 2px; top: 2px; background: #000; border-radius: 100%; }
+.nose { position: absolute; height: 20px; width: 35px; bottom: 40px; left: 0; right: 0; margin: auto; border-radius: 50px 20px/ 30px 15px; transform: rotate(15deg); background: #000; }
+.body { background: #fff; position: absolute; top: 200px; left: -20px; border-radius: 100px 100px 100px 100px / 126px 126px 96px 96px; width: 250px; height: 282px; box-shadow: 0 5px 10px rgba(0,0,0,.3); }
+.hand { width: 40px; height: 30px; border-radius: 50px; background: #000; position: absolute; top: 70px; left: -25px; transition: 0.3s; z-index: 600; }
+.hand.rgt { left: auto; right: -25px; }
+.panda.up .hand { transform: translateY(-30px) translateX(35px) rotate(-150deg); }
+.panda.up .hand.rgt { transform: translateY(-30px) translateX(-35px) rotate(150deg); }
+
+.foot { top: 360px; left: -80px; position: absolute; background: #000; z-index: 1400; width: 82px; height: 120px; border-radius: 40px 40px 39px 40px / 26px 26px 63px 63px; }
+.foot.rgt { left: auto; right: -80px; }
+
+form { 
+  max-width: 400px; padding: 20px 40px; background: #fff; margin: auto; 
+  box-shadow: 0 10px 15px rgba(0,0,0,.15); transition: 0.3s; position: relative; 
+  transform: translateY(-100px); z-index: 500; border: 1px solid #eee; border-radius: 20px;
+}
+form.up { transform: translateY(-150px); }
+
+h1 { color: var(--primary); font-family: 'Tahoma', sans-serif; margin-bottom: 30px; font-weight: 900; }
+.btn-login { background: var(--primary); color: #fff; padding: 10px; width: 100%; border: none; border-radius: 10px; cursor: pointer; margin-top: 20px; font-weight: bold; transition: 0.3s; }
+.btn-login:hover { background: #000; }
+
+.form-group { position: relative; margin-top: 25px; }
+.form-control { width: 100%; border: none; border-bottom: 1px solid #777; padding: 10px 0; outline: none; background: none; text-align: right; }
+.form-label { position: absolute; right: 0; top: 10px; color: #999; transition: 0.3s; pointer-events: none; }
+.form-control:focus ~ .form-label, .form-control:valid ~ .form-label { top: -15px; font-size: 12px; color: var(--primary); }
+
+.alert-bubble { 
+  position: absolute; color: #f00; font-size: 12px; right: -120px; top: -50px; 
+  padding: 15px; background: #fff; border-radius: 50px; box-shadow: 0 3px 5px rgba(0,0,0,.1); border: 1px solid #eee;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0) translateY(-100px); }
+  25% { transform: translateX(10px) translateY(-100px); }
+  75% { transform: translateX(-10px) translateY(-100px); }
+}
+.wrong-entry { animation: shake 0.3s; }
