@@ -1,11 +1,9 @@
+﻿export const runtime = "edge";
 import Link from "next/link";
 
-export const runtime = "edge";
-import Link from "next/link";
 export default function Home() {
   return (
     <div className="min-h-screen bg-[#f4f4f5] flex flex-col">
-      {/* Header */}
       <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -21,7 +19,6 @@ export default function Home() {
       </header>
 
       <main className="flex-1 flex flex-col items-center">
-        {/* Hero Section */}
         <section className="py-20 px-6 text-center max-w-4xl">
           <h1 className="text-5xl md:text-7xl font-black text-[#0a0a0a] leading-[1.2] mb-8">
             مدیریت هوشمند <br/>
@@ -32,12 +29,11 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/login" className="bg-[#10b981] text-white px-10 py-5 rounded-[2rem] font-black text-lg shadow-2xl shadow-emerald-200 hover:brightness-110 transition-all">
-              شروع به کار (پنل ویزیتور)
+              شروع به کار (ورود به پنل)
             </Link>
           </div>
         </section>
 
-        {/* Feature Cards */}
         <section className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full px-6 pb-20">
           {[
             { t: "نوبت‌دهی جراحی", d: "برنامه‌ریزی دقیق اتاق عمل و لیست انتظار", i: "🏥" },
@@ -54,7 +50,7 @@ export default function Home() {
       </main>
 
       <footer className="py-10 text-center text-gray-400 text-xs border-t border-gray-200 bg-white">
-        © ۲۰۲۴ مدیریت مطب | امنیت تضمین شده توسط لایه‌های دفاعی Cloudflare
+        © ۲۰۲۶ مدیریت مطب | امنیت تضمین شده توسط لایه‌های دفاعی Cloudflare
       </footer>
     </div>
   );

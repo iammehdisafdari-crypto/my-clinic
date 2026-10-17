@@ -1,4 +1,4 @@
-import { getDB } from "@/lib/db";
+ï»¿import { getDB } from "@/lib/db";
 import { verifyPassword } from "@/lib/crypto";
 import { createSession } from "@/lib/session";
 import { HOME_BY_ROLE } from "@/lib/permissions";
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   try {
     const { username, password } = (await request.json()) as { username?: string; password?: string };
     if (!username || !password) {
-      return Response.json({ success: false, error: "äÇã ˜ÇÑÈÑí æ ÑãÒ ÑÇ æÇÑÏ ˜äíÏ" }, { status: 400 });
+      return Response.json({ success: false, error: "Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ Ùˆ Ø±Ù…Ø² Ø±Ø§ ÙˆØ§Ø±Ø¯ Ú©Ù†ÛŒØ¯" }, { status: 400 });
     }
 
     const db = getDB();
@@ -19,13 +19,13 @@ export async function POST(request: Request) {
       .first();
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {
-      return Response.json({ success: false, error: "äÇã ˜ÇÑÈÑí íÇ ÑãÒ ÚÈæÑ ÇÔÊÈÇå ÇÓÊ" }, { status: 401 });
+      return Response.json({ success: false, error: "Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ ÛŒØ§ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª" }, { status: 401 });
     }
 
     await createSession(user);
     return Response.json({ success: true, role: user.role, home: HOME_BY_ROLE[user.role] || "/" });
   } catch (err: any) {
     console.error("LOGIN_ERROR:", err);
-    return Response.json({ success: false, error: "ÎØÇ ÏÑ ÈÑÞÑÇÑí ÇÑÊÈÇØ", details: err?.message || String(err) }, { status: 500 });
+    return Response.json({ success: false, error: "Ø®Ø·Ø§ Ø¯Ø± Ø¨Ø±Ù‚Ø±Ø§Ø±ÛŒ Ø§Ø±ØªØ¨Ø§Ø·", details: err?.message || String(err) }, { status: 500 });
   }
 }
