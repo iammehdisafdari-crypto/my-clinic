@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from 'react';
 import { useRouter } from "next/navigation";
 import './ring.css';
@@ -17,17 +17,29 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username: formData.email, password: formData.password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: formData.email.trim(),
+          password: formData.password,
+        }),
       });
-      const data = (await res.json()) as { success?: boolean; home?: string; error?: string };
+
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        home?: string;
+        error?: string;
+        details?: string;
+      };
 
       if (data.success) {
         router.push(data.home || "/");
         router.refresh();
       } else {
-        setError(data.error || "خطایی رخ داد");
+        setError(data.error || data.details || "خطایی رخ داد");
       }
-    } catch (err) {
+    } catch (err: any) {
       setError("خطا در ارتباط با سرور");
     } finally {
       setLoading(false);
@@ -43,19 +55,33 @@ export default function LoginPage() {
         <div className="login-form-container">
           <h2 style={{ color: "white" }}>ورود به پنل</h2>
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-            
+
             <div className="inputBx">
-              <input type="text" placeholder="ایمیل یا نام کاربری" required 
-                onChange={(e) => setFormData({...formData, email: e.target.value})} />
+              <input
+                type="text"
+                placeholder="ایمیل یا نام کاربری"
+                value={formData.email}
+                required
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              />
             </div>
 
             <div className="inputBx">
-              <input type="password" placeholder="رمز عبور" required 
-                onChange={(e) => setFormData({...formData, password: e.target.value})} />
+              <input
+                type="password"
+                placeholder="رمز عبور"
+                value={formData.password}
+                required
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              />
             </div>
 
-            {error && <p style={{ color: '#ff4d4d', fontSize: '12px', textAlign: 'center', margin: '5px 0' }}>{error}</p>}
-            
+            {error && (
+              <p style={{ color: '#ff4d4d', fontSize: '13px', textAlign: 'center', margin: '5px 0' }}>
+                {error}
+              </p>
+            )}
+
             <div className="inputBx">
               <button type="submit" disabled={loading} style={{ cursor: 'pointer' }}>
                 {loading ? "در حال پردازش..." : "ورود به پنل"}
