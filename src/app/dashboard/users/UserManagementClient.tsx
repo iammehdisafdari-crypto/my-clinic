@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2, Edit2, Check, X } from "lucide-react";
+import { Trash2, Edit2, Check, X, KeyRound } from "lucide-react";
 
 export const ROLE_HIERARCHY: Record<string, number> = {
   manager: 1,      // ادمین
@@ -42,7 +42,7 @@ export default function UserManagementClient({
 }) {
   const currentRank = ROLE_HIERARCHY[currentUserRole] ?? 99;
 
-  // فیلتر قطعی: کاربر فقط کاربرانی را می‌بیند که رتبه‌شان پایین‌تر (عدد بزرگتر) از خودش باشد
+  // فیلتر: کاربر فقط اعضای با سطح پایین‌تر از خود را مدیریت می‌کند
   const [users, setUsers] = useState<UserItem[]>(() => {
     return initialUsers.filter((u) => {
       const targetRank = ROLE_HIERARCHY[u.role] ?? 99;
@@ -51,11 +51,15 @@ export default function UserManagementClient({
   });
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ display_name: "", role: "" });
+  const [editForm, setEditForm] = useState({
+    username: "",
+    display_name: "",
+    role: "",
+    new_password: "",
+  });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // نقش‌هایی که مجاز است اختصاص دهد (فقط رتبه‌های پایین‌تر)
   const assignableRoles = Object.entries(ROLE_LABELS).filter(
     ([roleKey]) => (ROLE_HIERARCHY[roleKey] ?? 99) > currentRank
   );
@@ -63,8 +67,10 @@ export default function UserManagementClient({
   function startEdit(u: UserItem) {
     setEditingId(u.id);
     setEditForm({
+      username: u.username || "",
       display_name: u.display_name || "",
       role: u.role,
+      new_password: "",
     });
   }
 
@@ -81,16 +87,27 @@ export default function UserManagementClient({
     setLoading(false);
 
     if (res.ok) {
-      setUsers(users.map((u) => (u.id === id ? { ...u, ...editForm } : u)));
+      setUsers(
+        users.map((u) =>
+          u.id === id
+            ? {
+                ...u,
+                username: editForm.username.trim(),
+                display_name: editForm.display_name.trim(),
+                role: editForm.role,
+              }
+            : u
+        )
+      );
       setEditingId(null);
-      setMsg("کاربر با موفقیت ویرایش شد.");
+      setMsg("اطلاعات کاربر با موفقیت به‌روزرسانی شد.");
     } else {
       setMsg(data.error || "خطا در ویرایش کاربر");
     }
   }
 
   async function handleDelete(id: number) {
-    if (!confirm("آیا از حذف این کاربر اطمینان دارید؟ این عملیات غیرقابل بازگشت است.")) return;
+    if (!confirm("آیا از حذف این کاربر اطمینان دارید؟")) return;
 
     setLoading(true);
     setMsg("");
@@ -131,7 +148,7 @@ export default function UserManagementClient({
           <thead>
             <tr className="border-b border-gray-100 text-gray-400 text-xs">
               <th className="py-3 px-4">نام و نام خانوادگی</th>
-              <th className="py-3 px-4">نام کاربری</th>
+              <th className="py-3 px-4">نام کاربری و تغییر رمز</th>
               <th className="py-3 px-4">نقش دسترسی</th>
               <th className="py-3 px-4 text-center">عملیات</th>
             </tr>
@@ -149,6 +166,7 @@ export default function UserManagementClient({
                         onChange={(e) =>
                           setEditForm({ ...editForm, display_name: e.target.value })
                         }
+                        placeholder="نام نمایشی"
                         className="border border-gray-200 rounded-lg p-1.5 text-xs w-full outline-none focus:border-brand-green"
                       />
                     ) : (
@@ -157,7 +175,38 @@ export default function UserManagementClient({
                   </td>
 
                   <td className="py-3.5 px-4 font-mono text-gray-600 text-xs dir-ltr text-right">
-                    {u.username}
+                    {isEditing ? (
+                      <div className="flex flex-col gap-1.5 min-w-[170px]">
+                        <input
+                          type="text"
+                          value={editForm.username}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, username: e.target.value })
+                          }
+                          placeholder="نام کاربری"
+                          className="w-full px-2 py-1 border border-emerald-500 rounded-lg text-xs font-mono bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                          dir="ltr"
+                        />
+                        <div className="relative">
+                          <input
+                            type="password"
+                            value={editForm.new_password}
+                            onChange={(e) =>
+                              setEditForm({ ...editForm, new_password: e.target.value })
+                            }
+                            placeholder="رمز جدید (اختیاری)"
+                            className="w-full pl-6 pr-2 py-1 border border-dashed border-gray-300 rounded-lg text-xs font-mono bg-gray-50 text-gray-800 focus:outline-none focus:border-emerald-500 placeholder:font-sans placeholder:text-[11px]"
+                            dir="ltr"
+                          />
+                          <KeyRound
+                            size={12}
+                            className="absolute left-1.5 top-1/2 -translate-y-1/2 text-gray-400"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      u.username
+                    )}
                   </td>
 
                   <td className="py-3.5 px-4">
@@ -230,13 +279,6 @@ export default function UserManagementClient({
                 </tr>
               );
             })}
-            {users.length === 0 && (
-              <tr>
-                <td colSpan={4} className="py-8 text-center text-xs text-gray-400">
-                  کاربری جهت نمایش وجود ندارد.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
