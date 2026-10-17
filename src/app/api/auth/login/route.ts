@@ -27,3 +27,10 @@ export async function POST(request: Request) {
     return Response.json({ success: false, error: "خطا در برقراری ارتباط" }, { status: 500 });
   }
 }
+await createSession(user);
+    return Response.json({ success: true, role: user.role, home: HOME_BY_ROLE[user.role] || "/" });
+  } catch (err: any) {
+    console.error("LOGIN_ERROR:", err);
+    return Response.json({ success: false, error: "خطا در برقراری ارتباط", details: err?.message || String(err) }, { status: 500 });
+  }
+}
