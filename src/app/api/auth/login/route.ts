@@ -7,7 +7,15 @@ export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
-    const { username, password } = (await request.json()) as { username?: string; password?: string };
+    const body = (await request.json().catch(() => ({}))) as Record<string, any>;
+    
+    // استخراج نام کاربری یا ایمیل با تمامی نام‌های رایج فیلدها
+    const rawUsername = body.username || body.email || body.identifier || body.user;
+    const rawPassword = body.password || body.pass;
+
+    const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
+    const password = typeof rawPassword === "string" ? rawPassword : "";
+
     if (!username || !password) {
       return Response.json({ success: false, error: "نام کاربری و رمز را وارد کنید" }, { status: 400 });
     }
@@ -15,7 +23,7 @@ export async function POST(request: Request) {
     const db = getDB();
     const user = await db
       .prepare("SELECT * FROM users WHERE (username = ?1 OR email = ?1) AND active = 1")
-      .bind(username.trim())
+      .bind(username)
       .first();
 
     if (!user || !(await verifyPassword(password, user.password_hash))) {
