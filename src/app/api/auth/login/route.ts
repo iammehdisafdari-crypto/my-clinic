@@ -1,5 +1,5 @@
 import { getDB } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
+import { verifyPassword } from "@/lib/crypto";
 import { createSession } from "@/lib/session";
 import { HOME_BY_ROLE } from "@/lib/permissions";
 
