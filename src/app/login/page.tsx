@@ -4,13 +4,12 @@ import { useRouter } from "next/navigation";
 import './ring.css';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [formData, setFormData] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
@@ -18,17 +17,18 @@ export default function LoginPage() {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: formData.email, password: formData.password }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { success?: boolean; home?: string; error?: string };
 
       if (data.success) {
-        router.push(data.role === "visitor" ? "/dashboard/visitor" : "/dashboard/manager");
+        router.push(data.home || "/");
+        router.refresh();
       } else {
-        setError(data.error || "خطا در ورود");
+        setError(data.error || "خطایی رخ داد");
       }
     } catch (err) {
-      setError("ارتباط با سرور برقرار نشد");
+      setError("خطا در ارتباط با سرور");
     } finally {
       setLoading(false);
     }
@@ -37,36 +37,28 @@ export default function LoginPage() {
   return (
     <div className="login-body">
       <div className="ring">
-        {/* رنگ‌های نئونی سبز برای رینگ‌ها */}
-        <i style={{ "--clr": "#10b981" } as any}></i>
-        <i style={{ "--clr": "#34d399" } as any}></i>
-        <i style={{ "--clr": "#059669" } as any}></i>
-        
+        <i style={{ "--clr": "#10b981" } as React.CSSProperties}></i>
+        <i style={{ "--clr": "#34d399" } as React.CSSProperties}></i>
+        <i style={{ "--clr": "#059669" } as React.CSSProperties}></i>
         <div className="login-form-container">
-          <h2>ورود پزشکان</h2>
-          <form onSubmit={handleLogin} style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <h2 style={{ color: "white" }}>ورود به پنل</h2>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+            
             <div className="inputBx">
-              <input 
-                type="text" 
-                placeholder="نام کاربری" 
-                required 
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
+              <input type="text" placeholder="ایمیل یا نام کاربری" required 
+                onChange={(e) => setFormData({...formData, email: e.target.value})} />
             </div>
+
             <div className="inputBx">
-              <input 
-                type="password" 
-                placeholder="رمز عبور" 
-                required 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
+              <input type="password" placeholder="رمز عبور" required 
+                onChange={(e) => setFormData({...formData, password: e.target.value})} />
             </div>
-            {error && <p className="error-msg">{error}</p>}
+
+            {error && <p style={{ color: '#ff4d4d', fontSize: '12px', textAlign: 'center', margin: '5px 0' }}>{error}</p>}
+            
             <div className="inputBx">
-              <button type="submit" disabled={loading}>
-                {loading ? "در حال بررسی..." : "ورود به سیستم"}
+              <button type="submit" disabled={loading} style={{ cursor: 'pointer' }}>
+                {loading ? "در حال پردازش..." : "ورود به پنل"}
               </button>
             </div>
           </form>

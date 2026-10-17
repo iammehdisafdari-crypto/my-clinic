@@ -1,0 +1,2267 @@
+﻿
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\auth\login\route.ts
+import { getDB } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+import { createSession } from "@/lib/session";
+import { HOME_BY_ROLE } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+export async function POST(request: Request) {
+  try {
+    const { username, password } = (await request.json()) as { username?: string; password?: string };
+    if (!username || !password)
+      return Response.json({ success: false, error: "نام کاربری و رمز را وارد کنید" }, { status: 400 });
+
+    const db = getDB();
+    const user = await db
+      .prepare("SELECT * FROM users WHERE (username = ?1 OR email = ?1) AND active = 1")
+      .bind(username.trim())
+      .first();
+
+    // پیام یکسان برای «کاربر نیست» و «رمز غلط» (کسی نتواند حدس بزند کدام حساب وجود دارد)
+    if (!user || !(await verifyPassword(password, user.password_hash)))
+      return Response.json({ success: false, error: "نام کاربری یا رمز عبور اشتباه است" }, { status: 401 });
+
+    await createSession(user);
+    return Response.json({ success: true, role: user.role, home: HOME_BY_ROLE[user.role] || "/" });
+  } catch {
+    return Response.json({ success: false, error: "خطا در برقراری ارتباط" }, { status: 500 });
+  }
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\auth\logout\route.ts
+import { destroySession } from "@/lib/session";
+
+export const runtime = "edge";
+
+export async function POST() {
+  await destroySession();
+  return Response.json({ success: true });
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\patients\route.ts
+import { getDB } from "@/lib/db";
+import { guard } from "@/lib/permissions";
+import { normText, toEnDigits } from "@/lib/normalize";
+
+export const runtime = "edge";
+
+// تاریخ امروز به وقت تهران، به شکل YYYY-MM-DD
+function todayTehran() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+}
+
+const COLS =
+  "id, daily_number, admission_date, first_name, last_name, phone, landline, father_name, age, job, marital_status, residence_area, surgery_type, referral_source, notes, created_at";
+
+// بدون q: بیماران امروز | با q: جستجو بر اساس نام، نام خانوادگی یا شماره
+export async function GET(request: Request) {
+  const { error } = await guard("patients:read");
+  if (error) return error;
+
+  const q = normText(new URL(request.url).searchParams.get("q")).replace(/[%_]/g, "");
+  const db = getDB();
+
+  if (!q) {
+    const { results } = await db
+      .prepare(`SELECT ${COLS} FROM patients WHERE admission_date = ? ORDER BY daily_number DESC LIMIT 100`)
+      .bind(todayTehran())
+      .all();
+    return Response.json(results);
+  }
+
+  const like = `%${toEnDigits(q)}%`;
+  const { results } = await db
+    .prepare(
+      `SELECT ${COLS} FROM patients
+       WHERE (first_name || ' ' || last_name) LIKE ?1
+          OR (last_name || ' ' || first_name) LIKE ?1
+          OR phone LIKE ?1
+          OR landline LIKE ?1
+       ORDER BY id DESC LIMIT 50`
+    )
+    .bind(like)
+    .all();
+  return Response.json(results);
+}
+
+// ثبت بیمار جدید
+export async function POST(request: Request) {
+  const { user, error } = await guard("patients:write");
+  if (error) return error;
+
+  const b = (await request.json()) as Record<string, unknown>;
+  const first_name = normText(b.first_name);
+  const last_name = normText(b.last_name);
+  const phone = toEnDigits(String(b.phone ?? "")).replace(/\D/g, "");
+
+  if (!first_name || !last_name)
+    return Response.json({ error: "نام و نام خانوادگی را وارد کنید" }, { status: 400 });
+  if (!/^09\d{9}$/.test(phone))
+    return Response.json({ error: "شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود" }, { status: 400 });
+
+  let age: number | null = null;
+  const ageRaw = toEnDigits(String(b.age ?? "")).trim();
+  if (ageRaw) {
+    age = Number(ageRaw);
+    if (!Number.isInteger(age) || age < 0 || age > 120)
+      return Response.json({ error: "سن نامعتبر است" }, { status: 400 });
+  }
+
+  const landline = toEnDigits(String(b.landline ?? "")).replace(/\D/g, "") || null;
+  const opt = (v: unknown) => normText(v) || null;
+  const date = todayTehran();
+
+  try {
+    const db = getDB();
+    // شماره پرونده روز: بزرگ‌ترین شماره‌ی امروز + ۱ (هر روز از ۱ شروع می‌شود)
+    const res = await db
+      .prepare(
+        `INSERT INTO patients
+         (daily_number, admission_date, first_name, last_name, phone, landline, father_name, age,
+          job, marital_status, residence_area, surgery_type, referral_source, notes, created_by)
+         VALUES
+         ((SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1),
+          ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
+      )
+      .bind(
+        date, first_name, last_name, phone, landline, opt(b.father_name), age,
+        opt(b.job), opt(b.marital_status), opt(b.residence_area), opt(b.surgery_type),
+        opt(b.referral_source), opt(b.notes), user.uid
+      )
+      .run();
+
+    const row = await db
+      .prepare("SELECT id, daily_number, admission_date FROM patients WHERE id = ?")
+      .bind(res.meta.last_row_id)
+      .first();
+    return Response.json({ ok: true, patient: row });
+  } catch {
+    return Response.json({ error: "ثبت بیمار انجام نشد. دوباره تلاش کنید" }, { status: 500 });
+  }
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\users\[id]\route.ts
+import { getDB } from "@/lib/db";
+import { guard } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+export async function PATCH(
+  request: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { user, error } = await guard("users:manage");
+  if (error) return error;
+
+  const { id } = await ctx.params;
+  const uid = Number(id);
+  const b = (await request.json()) as { active?: boolean };
+
+  if (!Number.isInteger(uid) || typeof b.active !== "boolean")
+    return Response.json({ error: "اطلاعات نامعتبر" }, { status: 400 });
+
+  if (uid === user.uid && !b.active)
+    return Response.json({ error: "نمی‌توانید خودتان را غیرفعال کنید" }, { status: 400 });
+    const target = await getDB()
+    .prepare("SELECT role FROM users WHERE id = ?")
+    .bind(uid)
+    .first();
+  if (!target || target.role === "manager" || target.role === "doctor")
+    return Response.json({ error: "این کاربر قابل تغییر نیست" }, { status: 403 }); 
+  await getDB()
+    .prepare("UPDATE users SET active = ? WHERE id = ?")
+    .bind(b.active ? 1 : 0, uid)
+    .run();
+
+  return Response.json({ ok: true });
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\users\route.ts
+import { getDB } from "@/lib/db";
+import { guard } from "@/lib/permissions";
+import { hashPassword } from "@/lib/password";
+
+export const runtime = "edge";
+
+const ROLES = ["scheduler", "visitor", "uploader", "nurse"];
+// لیست کارمندان: فقط مدیر و دکتر
+export async function GET() {
+  const { error } = await guard("users:manage");
+  if (error) return error;
+  const { results } = await getDB()
+    .prepare("SELECT id, username, email, full_name, role, active FROM users WHERE role NOT IN ('manager','doctor') ORDER BY id")
+    .all();
+  return Response.json(results);
+}
+
+// ساخت کارمند جدید: فقط مدیر و دکتر (ثبت‌نام آزاد وجود ندارد)
+export async function POST(request: Request) {
+  const { error } = await guard("users:manage");
+  if (error) return error;
+  const b = (await request.json()) as Record<string, string>;
+  if (!b.username || !b.full_name || !b.password || b.password.length < 8 || !ROLES.includes(b.role))
+    return Response.json({ error: "اطلاعات نامعتبر (رمز حداقل ۸ کاراکتر)" }, { status: 400 });
+  try {
+    await getDB()
+      .prepare("INSERT INTO users (username, email, password_hash, full_name, role) VALUES (?,?,?,?,?)")
+      .bind(b.username.trim(), b.email?.trim() || null, await hashPassword(b.password), b.full_name.trim(), b.role)
+      .run();
+  } catch {
+    return Response.json({ error: "این نام کاربری یا ایمیل قبلاً ثبت شده" }, { status: 409 });
+  }
+  return Response.json({ ok: true });
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\visits\[id]\route.ts
+import { getDB } from "@/lib/db";
+import { guard } from "@/lib/permissions";
+import { normText, toEnDigits } from "@/lib/normalize";
+import { HISTORY_QUESTIONS } from "@/lib/visit-options";
+
+export const runtime = "edge";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+// مبلغ: ارقام فارسی را قبول می‌کند، خالی = null، نامعتبر = "bad"
+function money(v: unknown): number | null | "bad" {
+  const s = toEnDigits(String(v ?? "")).replace(/[,،\s]/g, "");
+  if (!s) return null;
+  if (!/^\d{1,10}$/.test(s)) return "bad";
+  return Number(s);
+}
+
+type Entry = { none: boolean; items: string[]; when: string; note: string };
+
+// سوابق را تمیز می‌کند و مطمئن می‌شود به هر شش سؤال جواب داده شده
+function cleanHistory(h: unknown): { data?: Record<string, Entry>; error?: string } {
+  const src = (h && typeof h === "object" ? h : {}) as Record<string, any>;
+  const data: Record<string, Entry> = {};
+  for (const q of HISTORY_QUESTIONS) {
+    const v = src[q.key] ?? {};
+    const none = v.none === true;
+    const items: string[] =
+      none || !Array.isArray(v.items)
+        ? []
+        : v.items.slice(0, 20).map((s: unknown) => normText(s).slice(0, 40)).filter(Boolean);
+    if (!none && items.length === 0) return { error: `به سؤال «${q.title}» پاسخ داده نشده` };
+    data[q.key] = {
+      none,
+      items,
+      when: none || !q.hasWhen ? "" : normText(v.when).slice(0, 40),
+      note: normText(v.note).slice(0, 30),
+    };
+  }
+  return { data };
+}
+
+// جزئیات یک ویزیت + اطلاعات بیمار + لیست جراح‌ها
+export async function GET(_req: Request, ctx: Ctx) {
+  const { error } = await guard("visits:read");
+  if (error) return error;
+
+  const id = Number((await ctx.params).id);
+  if (!Number.isInteger(id)) return Response.json({ error: "نامعتبر" }, { status: 400 });
+
+  const db = getDB();
+  const visit = await db
+    .prepare(
+      `SELECT v.*, p.daily_number, p.admission_date, p.first_name, p.last_name, p.phone, p.landline,
+              p.father_name, p.age, p.job, p.marital_status, p.residence_area, p.surgery_type,
+              p.referral_source, p.notes AS patient_notes
+       FROM visits v JOIN patients p ON p.id = v.patient_id WHERE v.id = ?`
+    )
+    .bind(id)
+    .first();
+  if (!visit) return Response.json({ error: "ویزیت پیدا نشد" }, { status: 404 });
+
+  const { results } = await db
+    .prepare("SELECT full_name FROM users WHERE role = 'doctor' AND active = 1 ORDER BY full_name")
+    .all();
+
+  let history = null;
+  try {
+    history = visit.history ? JSON.parse(visit.history) : null;
+  } catch {}
+
+  return Response.json({
+    visit: { ...visit, history },
+    surgeons: results.map((r: any) => r.full_name),
+  });
+}
+
+// part = "doctor": فرم دکتر | part = "secretary": تاریخ جراحی و هزینه‌ها
+export async function PATCH(request: Request, ctx: Ctx) {
+  const id = Number((await ctx.params).id);
+  if (!Number.isInteger(id)) return Response.json({ error: "نامعتبر" }, { status: 400 });
+  const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const db = getDB();
+
+  if (b.part === "doctor") {
+    const { user, error } = await guard("visits:doctor");
+    if (error) return error;
+
+    const cost = money(b.surgery_cost);
+    if (cost === "bad") return Response.json({ error: "هزینه جراحی نامعتبر است" }, { status: 400 });
+    const h = cleanHistory(b.history);
+    if (!h.data) return Response.json({ error: h.error }, { status: 400 });
+
+    const res = await db
+      .prepare(
+        `UPDATE visits
+         SET surgeon_name = ?, surgery_cost = ?, history = ?, status = 'completed',
+             doctor_id = ?, completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
+         WHERE id = ?`
+      )
+      .bind(normText(b.surgeon_name).slice(0, 60) || null, cost, JSON.stringify(h.data), user.uid, id)
+      .run();
+    if (!res.meta.changes) return Response.json({ error: "ویزیت پیدا نشد" }, { status: 404 });
+    return Response.json({ ok: true });
+  }
+
+  if (b.part === "secretary") {
+    const { user, error } = await guard("surgeries:write");
+    if (error) return error;
+
+    const visit = await db.prepare("SELECT status FROM visits WHERE id = ?").bind(id).first();
+    if (!visit) return Response.json({ error: "ویزیت پیدا نشد" }, { status: 404 });
+    if (visit.status !== "completed")
+      return Response.json({ error: "ابتدا باید دکتر ویزیت را تکمیل کند" }, { status: 409 });
+
+    const date = toEnDigits(normText(b.surgery_date)).replace(/[-.]/g, "/");
+    if (date && !/^14\d{2}\/(0[1-9]|1[0-2])\/(0[1-9]|[12]\d|3[01])$/.test(date))
+      return Response.json({ error: "تاریخ جراحی را شمسی و به شکل ۱۴۰۵/۰۸/۲۵ وارد کنید" }, { status: 400 });
+
+    const reservation = money(b.reservation_fee);
+    const photography = money(b.photography_fee);
+    if (reservation === "bad" || photography === "bad")
+      return Response.json({ error: "مبلغ نامعتبر است" }, { status: 400 });
+
+    await db
+      .prepare(
+        `UPDATE visits
+         SET surgery_date = ?, reservation_fee = ?, photography_fee = ?,
+             updated_by = ?, updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`
+      )
+      .bind(date || null, reservation, photography, user.uid, id)
+      .run();
+    return Response.json({ ok: true });
+  }
+
+  return Response.json({ error: "نوع به‌روزرسانی نامعتبر است" }, { status: 400 });
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\api\visits\route.ts
+import { getDB } from "@/lib/db";
+import { guard } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+function todayTehran() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+}
+
+// لیست ویزیت‌های یک روز (پیش‌فرض: امروز). ارجاع‌شده‌ها به ترتیب ارجاع، تکمیل‌شده‌ها پایین‌تر
+export async function GET(request: Request) {
+  const { error } = await guard("visits:read");
+  if (error) return error;
+
+  const date = new URL(request.url).searchParams.get("date") || todayTehran();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return Response.json({ error: "تاریخ نامعتبر" }, { status: 400 });
+
+  const { results } = await getDB()
+    .prepare(
+      `SELECT v.id, v.patient_id, v.visit_date, v.status, v.referred_at, v.completed_at,
+              v.surgery_date, p.first_name, p.last_name, p.phone, p.age, p.surgery_type, p.daily_number
+       FROM visits v JOIN patients p ON p.id = v.patient_id
+       WHERE v.visit_date = ?
+       ORDER BY (v.status = 'completed'), v.referred_at ASC, v.id ASC`
+    )
+    .bind(date)
+    .all();
+  return Response.json(results);
+}
+
+// ارجاع بیمار به دکتر (منشی)
+export async function POST(request: Request) {
+  const { user, error } = await guard("visits:refer");
+  if (error) return error;
+
+  const b = (await request.json().catch(() => ({}))) as { patient_id?: unknown };
+  const pid = Number(b.patient_id);
+  if (!Number.isInteger(pid) || pid <= 0)
+    return Response.json({ error: "بیمار نامعتبر است" }, { status: 400 });
+
+  const db = getDB();
+  const patient = await db.prepare("SELECT id FROM patients WHERE id = ?").bind(pid).first();
+  if (!patient) return Response.json({ error: "بیمار پیدا نشد" }, { status: 404 });
+
+  const date = todayTehran();
+  const dup = await db
+    .prepare("SELECT id FROM visits WHERE patient_id = ? AND visit_date = ? AND status = 'referred'")
+    .bind(pid, date)
+    .first();
+  if (dup) return Response.json({ error: "این بیمار امروز قبلاً به دکتر ارجاع شده" }, { status: 409 });
+
+  const res = await db
+    .prepare("INSERT INTO visits (patient_id, visit_date, referred_by) VALUES (?, ?, ?)")
+    .bind(pid, date, user.uid)
+    .run();
+  return Response.json({ ok: true, id: res.meta.last_row_id });
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\manager\page.tsx
+import { requireRole } from "@/lib/permissions";
+import { getDB } from "@/lib/db";
+import StatCard from "../StatCard";
+
+export const runtime = "edge";
+
+const fa = (n: unknown) => Number(n ?? 0).toLocaleString("fa-IR");
+
+export default async function ManagerDashboard() {
+  await requireRole(["manager", "doctor"]);
+
+  const now = new Date();
+  const today = now.toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const dateFa = now.toLocaleDateString("fa-IR", {
+    timeZone: "Asia/Tehran",
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const s = (await getDB()
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM patients WHERE admission_date = ?1) AS patients_today,
+         (SELECT COUNT(*) FROM visits WHERE visit_date = ?1 AND status = 'referred') AS waiting,
+         (SELECT COUNT(*) FROM visits WHERE visit_date = ?1 AND status = 'completed') AS done`
+    )
+    .bind(today)
+    .first()) as { patients_today: number; waiting: number; done: number } | null;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-black">خلاصه‌ی امروز</h1>
+        <p className="text-sm text-gray-500 mt-1">{dateFa}</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard
+          href="/dashboard/visits"
+          title="در انتظار دکتر"
+          value={fa(s?.waiting)}
+          hint="بیمارهای ارجاع‌شده که هنوز ویزیت نشده‌اند. برای دیدن لیست بزنید."
+          accent={(s?.waiting ?? 0) > 0}
+        />
+        <StatCard
+          href="/dashboard/visits"
+          title="ویزیت‌های تکمیل‌شده امروز"
+          value={fa(s?.done)}
+          hint="ویزیت‌هایی که دکتر فرمشان را ثبت کرده است."
+        />
+        <StatCard
+          href="/dashboard/patients"
+          title="بیماران ثبت‌شده امروز"
+          value={fa(s?.patients_today)}
+          hint="بیمارهایی که امروز ثبت شده‌اند. برای جستجو و ثبت بزنید."
+        />
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\nurse\page.tsx
+import { requireRole } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+export default async function Page() {
+  await requireRole(["nurse", "manager", "doctor"]);
+  return (
+    <div className="p-10" dir="rtl">
+      <h1 className="text-2xl font-bold text-brand-green">پنل پرستار</h1>
+      <p className="mt-4 text-zinc-600">این بخش در مراحل بعد ساخته می‌شود.</p>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\patients\page.tsx
+import { requireRole, can } from "@/lib/permissions";
+import PatientsClient from "./PatientsClient";
+
+export const runtime = "edge";
+
+export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader"]);
+  const { q } = await searchParams;
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-black">بیماران</h1>
+      <PatientsClient
+        key={q ?? ""}
+        initialQ={q ?? ""}
+        canWrite={can(user.role, "patients:write")}
+        canRefer={can(user.role, "visits:refer")}
+      />
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\patients\PatientsClient.tsx
+"use client";
+import { useCallback, useEffect, useState } from "react";
+
+type Patient = {
+  id: number;
+  daily_number: number;
+  admission_date: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  age: number | null;
+  job: string | null;
+  surgery_type: string | null;
+};
+
+const EMPTY = {
+  first_name: "",
+  last_name: "",
+  phone: "",
+  landline: "",
+  father_name: "",
+  age: "",
+  job: "",
+  marital_status: "",
+  residence_area: "",
+  surgery_type: "",
+  referral_source: "",
+  notes: "",
+};
+
+function toEn(s: string) {
+  return s
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+}
+
+  export default function PatientsClient({
+  canWrite,
+  canRefer,
+  initialQ,
+}: {
+  canWrite: boolean;
+  canRefer: boolean;
+  initialQ: string;
+}) {
+  const [form, setForm] = useState(EMPTY);
+  const [msg, setMsg] = useState("");
+  const [dupes, setDupes] = useState<Patient[]>([]);
+  const [q, setQ] = useState(initialQ);
+  const [list, setList] = useState<Patient[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [referMsg, setReferMsg] = useState("");
+
+  async function refer(p: Patient) {
+    setReferMsg("");
+    const r = await fetch("/api/visits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patient_id: p.id }),
+    });
+    const data = (await r.json()) as { error?: string };
+    setReferMsg(r.ok ? `${p.first_name} ${p.last_name} به دکتر ارجاع شد` : data.error || "خطا");
+  }
+
+  const load = useCallback(async (query: string) => {
+    const r = await fetch("/api/patients?q=" + encodeURIComponent(query));
+    if (r.ok) setList(await r.json());
+  }, []);
+
+  // جستجو هنگام تایپ (با ۰.۳ ثانیه تاخیر)
+  useEffect(() => {
+    const t = setTimeout(() => load(q), 300);
+    return () => clearTimeout(t);
+  }, [q, load]);
+
+  async function save(force: boolean) {
+    setMsg("");
+
+    // اگر این شماره موبایل قبلاً ثبت شده، اول هشدار می‌دهیم
+    if (!force) {
+      const phone = toEn(form.phone).replace(/\D/g, "");
+      if (phone) {
+        const r = await fetch("/api/patients?q=" + encodeURIComponent(phone));
+        if (r.ok) {
+          const found = ((await r.json()) as Patient[]).filter((p) => p.phone === phone);
+          if (found.length) {
+            setDupes(found);
+            return;
+          }
+        }
+      }
+    }
+
+    setSaving(true);
+    const r = await fetch("/api/patients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    const data = (await r.json()) as { error?: string; patient?: { daily_number: number } };
+    setSaving(false);
+
+    if (r.ok && data.patient) {
+      setForm(EMPTY);
+      setDupes([]);
+      setMsg(`بیمار ثبت شد. شماره پرونده امروز: ${data.patient.daily_number}`);
+      load(q);
+    } else {
+      setMsg(data.error || "خطا");
+    }
+  }
+
+  const input = "border border-gray-200 rounded-xl p-3 w-full";
+  const f = (k: keyof typeof EMPTY) => ({
+    value: form[k],
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
+      setForm({ ...form, [k]: e.target.value }),
+  });
+
+  return (
+    <div className="space-y-8">
+      {canWrite && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            save(false);
+          }}
+          className="bg-white p-6 rounded-[2rem] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4"
+        >
+          <h2 className="md:col-span-3 text-lg font-black">ثبت بیمار جدید</h2>
+          <input className={input} placeholder="نام *" {...f("first_name")} />
+          <input className={input} placeholder="نام خانوادگی *" {...f("last_name")} />
+          <input className={input} placeholder="شماره موبایل *" {...f("phone")} />
+          <input className={input} placeholder="شماره ثابت" {...f("landline")} />
+          <input className={input} placeholder="نام پدر" {...f("father_name")} />
+          <input className={input} placeholder="سن" {...f("age")} />
+          <input className={input} placeholder="شغل" {...f("job")} />
+          <select className={input} {...f("marital_status")}>
+            <option value="">وضعیت تاهل</option>
+            <option value="مجرد">مجرد</option>
+            <option value="متاهل">متاهل</option>
+          </select>
+          <input className={input} placeholder="محدوده محل سکونت" {...f("residence_area")} />
+          <input className={input} placeholder="نوع جراحی" {...f("surgery_type")} />
+          <input className={input} placeholder="نحوه آشنایی" {...f("referral_source")} />
+          <textarea className={input + " md:col-span-3"} rows={2} placeholder="توضیحات" {...f("notes")} />
+
+          {dupes.length > 0 && (
+            <div className="md:col-span-3 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
+              <p className="font-bold text-sm">این شماره موبایل قبلاً ثبت شده:</p>
+              {dupes.map((p) => (
+                <p key={p.id} className="text-sm">
+                  {p.first_name} {p.last_name} (پرونده شماره {p.daily_number}، تاریخ {p.admission_date})
+                </p>
+              ))}
+              <div className="flex gap-3">
+                <button type="button" onClick={() => save(true)} className="bg-brand-green text-white rounded-xl px-4 py-2 text-sm font-bold">
+                  بیمار جدید است، ثبت کن
+                </button>
+                <button type="button" onClick={() => setDupes([])} className="border border-gray-300 rounded-xl px-4 py-2 text-sm">
+                  انصراف
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button disabled={saving} className="bg-brand-green text-white rounded-xl p-3 font-bold md:col-span-1">
+            {saving ? "در حال ثبت..." : "ثبت بیمار"}
+          </button>
+          {msg && <p className="md:col-span-3 text-sm text-gray-600">{msg}</p>}
+                           {referMsg && <p className="text-sm text-gray-700">{referMsg}</p>}
+        </form>
+      )}
+
+      <div className="bg-white rounded-[2rem] shadow-sm p-6 space-y-4">
+        <input
+          className={input}
+          placeholder="جستجو با نام، نام خانوادگی یا شماره تلفن (خالی = بیماران امروز)"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <p className="text-sm text-gray-400">{q ? "نتایج جستجو" : "بیماران امروز"}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead>
+              <tr className="text-gray-400 text-sm">
+                <th className="p-3">شماره پرونده</th>
+                <th className="p-3">تاریخ پذیرش</th>
+                <th className="p-3">نام</th>
+                <th className="p-3">موبایل</th>
+                <th className="p-3">سن</th>
+                <th className="p-3">نوع جراحی</th>
+                                {canRefer && <th className="p-3"></th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {list.map((p) => (
+                <tr key={p.id}>
+                  <td className="p-3 font-bold">{p.daily_number}</td>
+                  <td className="p-3 text-sm font-mono">{p.admission_date}</td>
+                  <td className="p-3 font-bold">{p.first_name} {p.last_name}</td>
+                  <td className="p-3 text-sm font-mono">{p.phone}</td>
+                  <td className="p-3 text-sm">{p.age ?? "-"}</td>
+                  <td className="p-3 text-sm">{p.surgery_type || "-"}</td>
+                                    {canRefer && (
+                    <td className="p-3">
+                      <button onClick={() => refer(p)} className="text-sm underline">
+                        ارجاع به دکتر
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\scheduler\page.tsx
+import { requireRole } from "@/lib/permissions";
+import { getDB } from "@/lib/db";
+import StatCard from "../StatCard";
+
+export const runtime = "edge";
+
+const fa = (n: unknown) => Number(n ?? 0).toLocaleString("fa-IR");
+
+const STEPS = [
+  { n: "۱", title: "بیمار رسید", text: "اسمش را در «بیماران» جستجو کنید. اگر پرونده نداشت، ثبتش کنید." },
+  { n: "۲", title: "نوبتش شد", text: "جلوی اسمش در «بیماران» روی «ارجاع به دکتر» بزنید." },
+  {
+    n: "۳",
+    title: "دکتر ویزیت را تکمیل کرد",
+    text: "از «ویزیت‌ها» پرونده را باز کنید و نتیجه را ببینید. (ثبت تاریخ جراحی و هزینه‌ها به‌زودی اضافه می‌شود.)",
+  },
+];
+
+export default async function Page() {
+  await requireRole(["scheduler", "manager", "doctor"]);
+
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const s = (await getDB()
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM patients WHERE admission_date = ?1) AS patients_today,
+         (SELECT COUNT(*) FROM visits WHERE visit_date = ?1 AND status = 'referred') AS waiting,
+         (SELECT COUNT(*) FROM visits WHERE visit_date = ?1 AND status = 'completed') AS done`
+    )
+    .bind(today)
+    .first()) as { patients_today: number; waiting: number; done: number } | null;
+
+  return (
+    <div className="space-y-8">
+      <h1 className="text-2xl font-black">پنل منشی</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <StatCard href="/dashboard/patients" title="بیماران ثبت‌شده امروز" value={fa(s?.patients_today)} hint="ثبت و جستجوی بیمار" />
+        <StatCard
+          href="/dashboard/visits"
+          title="در انتظار دکتر"
+          value={fa(s?.waiting)}
+          hint="ارجاع‌شده‌هایی که هنوز ویزیت نشده‌اند"
+          accent={(s?.waiting ?? 0) > 0}
+        />
+        <StatCard href="/dashboard/visits" title="تکمیل‌شده توسط دکتر" value={fa(s?.done)} hint="پرونده‌های آماده‌ی مشاهده" />
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-lg font-black">روند کار شما</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {STEPS.map((st) => (
+            <div key={st.n} className="bg-white p-6 rounded-[2rem] shadow-sm">
+              <p className="text-3xl font-black text-brand-green mb-2">{st.n}</p>
+              <p className="font-bold mb-1">{st.title}</p>
+              <p className="text-sm text-gray-500">{st.text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\uploader\page.tsx
+import { requireRole } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+export default async function Page() {
+  await requireRole(["uploader", "manager", "doctor"]);
+  return (
+    <div className="p-10" dir="rtl">
+      <h1 className="text-2xl font-bold text-brand-green">پنل عکاسی</h1>
+      <p className="mt-4 text-zinc-600">این بخش در مراحل بعد ساخته می‌شود.</p>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\users\page.tsx
+import { requireRole } from "@/lib/permissions";
+import UsersClient from "./UsersClient";
+
+export const runtime = "edge";
+
+export default async function UsersPage() {
+  await requireRole(["manager", "doctor"]);
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-black">مدیریت کاربران</h1>
+      <UsersClient />
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\users\UsersClient.tsx
+"use client";
+import { useEffect, useState } from "react";
+
+type U = {
+  id: number;
+  username: string;
+  email: string | null;
+  full_name: string;
+  role: string;
+  active: number;
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  scheduler: "منشی",
+  visitor: "بازاریاب",
+  uploader: "عکاس",
+  nurse: "پرستار",
+};
+
+const EMPTY = { username: "", full_name: "", email: "", password: "", role: "scheduler" };
+
+export default function UsersClient() {
+  const [users, setUsers] = useState<U[]>([]);
+  const [form, setForm] = useState(EMPTY);
+  const [msg, setMsg] = useState("");
+
+  async function load() {
+    const r = await fetch("/api/users");
+    if (r.ok) setUsers(await r.json());
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg("");
+    const r = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    const data = (await r.json()) as { error?: string };
+    if (r.ok) {
+      setForm(EMPTY);
+      setMsg("کاربر ساخته شد");
+      load();
+    } else {
+      setMsg(data.error || "خطا");
+    }
+  }
+
+  async function toggle(u: U) {
+    setMsg("");
+    const r = await fetch(`/api/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !u.active }),
+    });
+    if (!r.ok) {
+      const data = (await r.json()) as { error?: string };
+      setMsg(data.error || "خطا");
+    }
+    load();
+  }
+
+  const input = "border border-gray-200 rounded-xl p-3 w-full";
+
+  return (
+    <div className="space-y-8">
+      <form onSubmit={create} className="bg-white p-6 rounded-[2rem] shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4">
+        <input className={input} placeholder="نام کاربری (انگلیسی)" value={form.username}
+          onChange={(e) => setForm({ ...form, username: e.target.value })} />
+        <input className={input} placeholder="نام کامل" value={form.full_name}
+          onChange={(e) => setForm({ ...form, full_name: e.target.value })} />
+        <input className={input} placeholder="ایمیل (اختیاری)" value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })} />
+        <input className={input} type="password" placeholder="رمز (حداقل ۸ کاراکتر)" value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })} />
+        <select className={input} value={form.role}
+          onChange={(e) => setForm({ ...form, role: e.target.value })}>
+          {Object.entries(ROLE_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <button className="bg-brand-green text-white rounded-xl p-3 font-bold">ساخت کاربر</button>
+        {msg && <p className="md:col-span-3 text-sm text-gray-600">{msg}</p>}
+      </form>
+
+      <div className="bg-white rounded-[2rem] shadow-sm p-4 overflow-x-auto">
+        <table className="w-full text-right">
+          <thead>
+            <tr className="text-gray-400 text-sm">
+              <th className="p-3">نام</th>
+              <th className="p-3">نام کاربری</th>
+              <th className="p-3">نقش</th>
+              <th className="p-3">وضعیت</th>
+              <th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {users.map((u) => (
+              <tr key={u.id}>
+                <td className="p-3 font-bold">{u.full_name}</td>
+                <td className="p-3 font-mono text-sm">{u.username}</td>
+                <td className="p-3 text-sm">{ROLE_LABELS[u.role] || u.role}</td>
+                <td className="p-3 text-sm">{u.active ? "فعال" : "غیرفعال"}</td>
+                <td className="p-3">
+                  <button onClick={() => toggle(u)} className="text-sm underline">
+                    {u.active ? "غیرفعال کن" : "فعال کن"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\visitor\page.tsx
+// src/app/dashboard/visitor/page.tsx
+import React from 'react';
+import { requireRole } from "@/lib/permissions";
+
+export const runtime = "edge";
+
+export default async function VisitorDashboard() {
+  await requireRole(["visitor", "manager", "doctor"]);
+  return (
+    <div className="p-10" dir="rtl">
+      <h1 className="text-2xl font-bold text-brand-green">پنل ثبت‌نام بیمار</h1>
+      <p className="mt-4 text-zinc-600">این صفحه به زودی با فرم ۲۰ فیلدی تکمیل می‌شود.</p>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\visits\[id]\page.tsx
+import Link from "next/link";
+import { requireRole, can } from "@/lib/permissions";
+import VisitDetail from "./VisitDetail";
+
+export const runtime = "edge";
+
+export default async function VisitPage({ params }: { params: Promise<{ id: string }> }) {
+  const user = await requireRole(["scheduler", "manager", "doctor"]);
+  const { id } = await params;
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <h1 className="text-2xl font-black">پرونده ویزیت</h1>
+        <Link href="/dashboard/visits" className="text-sm underline text-gray-500">
+          بازگشت به لیست
+        </Link>
+      </div>
+      <VisitDetail id={Number(id)} canDoctor={can(user.role, "visits:doctor")} />
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\visits\[id]\VisitDetail.tsx
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { HISTORY_QUESTIONS, WHEN_OPTIONS, NONE_LABEL, type HistoryKey } from "@/lib/visit-options";
+
+type Entry = { none: boolean; items: string[]; when: string; note: string };
+type History = Record<HistoryKey, Entry>;
+
+type Visit = {
+  id: number;
+  status: "referred" | "completed";
+  daily_number: number;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  landline: string | null;
+  father_name: string | null;
+  age: number | null;
+  job: string | null;
+  marital_status: string | null;
+  residence_area: string | null;
+  surgery_type: string | null;
+  referral_source: string | null;
+  patient_notes: string | null;
+  surgeon_name: string | null;
+  surgery_cost: number | null;
+  history: Partial<History> | null;
+};
+
+const emptyEntry = (): Entry => ({ none: false, items: [], when: "", note: "" });
+const emptyHistory = () =>
+  Object.fromEntries(HISTORY_QUESTIONS.map((q) => [q.key, emptyEntry()])) as History;
+
+const FA = "۰۱۲۳۴۵۶۷۸۹";
+function toEn(s: string) {
+  return s
+    .replace(/[۰-۹]/g, (d) => String(FA.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+}
+// نمایش مبلغ با جداکننده‌ی هزارگان، تا اشتباه در تعداد صفرها دیده شود
+function money(v: string) {
+  const n = Number(toEn(v).replace(/[,،\s]/g, ""));
+  return v.trim() && Number.isFinite(n) ? n.toLocaleString("fa-IR") + " تومان" : "";
+}
+
+function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={on}
+      className={`px-4 py-2 rounded-full text-sm border ${
+        on ? "bg-brand-green text-white border-brand-green" : "bg-white text-gray-700 border-gray-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+export default function VisitDetail({ id, canDoctor }: { id: number; canDoctor: boolean }) {
+  const router = useRouter();
+  const [visit, setVisit] = useState<Visit | null>(null);
+  const [surgeons, setSurgeons] = useState<string[]>([]);
+  const [err, setErr] = useState("");
+
+  const [history, setHistory] = useState<History>(emptyHistory());
+  const [surgeon, setSurgeon] = useState("");
+  const [surgeonOther, setSurgeonOther] = useState("");
+  const [cost, setCost] = useState("");
+  const [showMissing, setShowMissing] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const r = await fetch(`/api/visits/${id}`);
+      if (!r.ok) {
+        setErr("ویزیت پیدا نشد یا دسترسی ندارید");
+        return;
+      }
+      const d = (await r.json()) as { visit: Visit; surgeons: string[] };
+      const v = d.visit;
+      setVisit(v);
+      setSurgeons(d.surgeons);
+      if (v.history) setHistory({ ...emptyHistory(), ...v.history });
+      if (v.surgeon_name) {
+        if (d.surgeons.includes(v.surgeon_name)) setSurgeon(v.surgeon_name);
+        else {
+          setSurgeon("__other");
+          setSurgeonOther(v.surgeon_name);
+        }
+      } else if (d.surgeons.length === 1) {
+        setSurgeon(d.surgeons[0]);
+      }
+      if (v.surgery_cost != null) setCost(String(v.surgery_cost));
+    })();
+  }, [id]);
+
+  function patch(key: HistoryKey, p: Partial<Entry>) {
+    setHistory((h) => ({ ...h, [key]: { ...h[key], ...p } }));
+  }
+  function toggleItem(key: HistoryKey, item: string) {
+    const e = history[key];
+    const items = e.items.includes(item) ? e.items.filter((i) => i !== item) : [...e.items, item];
+    patch(key, { items, none: false });
+  }
+  function toggleNone(key: HistoryKey) {
+    patch(key, history[key].none ? { none: false } : { none: true, items: [], when: "", note: "" });
+  }
+
+  const missing = HISTORY_QUESTIONS.filter((q) => !history[q.key].none && history[q.key].items.length === 0);
+
+  async function save() {
+    setMsg("");
+    if (missing.length) {
+      setShowMissing(true);
+      setMsg(`به ${missing.length} سؤال پاسخ داده نشده (با رنگ قرمز مشخص شده)`);
+      return;
+    }
+    setSaving(true);
+    const r = await fetch(`/api/visits/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        part: "doctor",
+        surgeon_name: surgeon === "__other" ? surgeonOther : surgeon,
+        surgery_cost: cost,
+        history,
+      }),
+    });
+    const data = (await r.json()) as { error?: string };
+    setSaving(false);
+    if (r.ok) router.push("/dashboard/visits");
+    else setMsg(data.error || "خطا");
+  }
+
+  if (err) return <p className="text-sm text-red-600">{err}</p>;
+  if (!visit) return <p className="text-sm text-gray-400">در حال بارگذاری...</p>;
+
+  const info: [string, string | number | null][] = [
+    ["شماره پرونده امروز", visit.daily_number],
+    ["موبایل", visit.phone],
+    ["شماره ثابت", visit.landline],
+    ["نام پدر", visit.father_name],
+    ["سن", visit.age],
+    ["شغل", visit.job],
+    ["وضعیت تاهل", visit.marital_status],
+    ["محدوده سکونت", visit.residence_area],
+    ["نوع جراحی", visit.surgery_type],
+    ["نحوه آشنایی", visit.referral_source],
+  ];
+
+  return (
+    <div className="space-y-8">
+            {/* مراحل */}
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {[
+          { label: "۱. ارجاع منشی", state: "done" },
+          { label: "۲. ویزیت دکتر", state: visit.status === "completed" ? "done" : "current" },
+          { label: "۳. تکمیل منشی", state: visit.status === "completed" ? "current" : "todo" },
+        ].map((s) => (
+          <span
+            key={s.label}
+            className={`px-4 py-2 rounded-full font-bold ${
+              s.state === "done"
+                ? "bg-green-100 text-green-700"
+                : s.state === "current"
+                ? "bg-brand-green text-white"
+                : "bg-gray-100 text-gray-400"
+            }`}
+          >
+            {s.state === "done" ? "✓ " : ""}
+            {s.label}
+          </span>
+        ))}
+      </div>
+      {/* اطلاعات بیمار */}
+      <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
+        <h2 className="text-xl font-black">
+          {visit.first_name} {visit.last_name}
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {info.map(([label, val]) => (
+            <div key={label}>
+              <p className="text-xs text-gray-400">{label}</p>
+              <p className="text-sm font-bold">{val || "-"}</p>
+            </div>
+          ))}
+        </div>
+        {visit.patient_notes && <p className="text-sm text-gray-600">توضیحات: {visit.patient_notes}</p>}
+      </div>
+
+      {canDoctor ? (
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-8">
+          {visit.status === "completed" && (
+            <p className="text-sm bg-green-50 text-green-700 rounded-xl p-3">
+              این ویزیت قبلاً تکمیل شده؛ در صورت نیاز می‌توانید اصلاح و دوباره ثبت کنید.
+            </p>
+          )}
+          <p className="text-sm text-gray-500">
+            برای هر سؤال یا «ندارد» را بزنید یا گزینه‌ها را انتخاب کنید. چیزی لازم نیست تایپ شود (به‌جز هزینه).
+          </p>
+          {/* جراح و هزینه */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <p className="font-bold text-sm">نام جراح</p>
+              <div className="flex flex-wrap gap-2">
+                {surgeons.map((s) => (
+                  <Pill key={s} on={surgeon === s} onClick={() => setSurgeon(s)}>
+                    {s}
+                  </Pill>
+                ))}
+                <Pill on={surgeon === "__other"} onClick={() => setSurgeon("__other")}>
+                  سایر
+                </Pill>
+              </div>
+              {surgeon === "__other" && (
+                <input
+                  className="border border-gray-200 rounded-xl p-3 w-full"
+                  placeholder="نام جراح"
+                  value={surgeonOther}
+                  onChange={(e) => setSurgeonOther(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="space-y-2">
+              <p className="font-bold text-sm">هزینه جراحی (تومان)</p>
+              <input
+                className="border border-gray-200 rounded-xl p-3 w-full"
+                inputMode="numeric"
+                placeholder="مثلاً ۱۵۰۰۰۰۰۰"
+                value={cost}
+                onChange={(e) => setCost(e.target.value)}
+              />
+              <p className="text-sm text-gray-500 h-5">{money(cost)}</p>
+            </div>
+          </div>
+
+          {/* سؤال‌های تاریخچه */}
+          {HISTORY_QUESTIONS.map((q) => {
+            const e = history[q.key];
+            const bad = showMissing && !e.none && e.items.length === 0;
+            return (
+              <div key={q.key} className={`space-y-3 rounded-2xl p-4 border ${bad ? "border-red-400 bg-red-50" : "border-gray-100"}`}>
+                <p className="font-bold text-sm">{q.title}</p>
+                <div className="flex flex-wrap gap-2">
+                  <Pill on={e.none} onClick={() => toggleNone(q.key)}>
+                    {NONE_LABEL}
+                  </Pill>
+                  {q.items.map((item) => (
+                    <Pill key={item} on={e.items.includes(item)} onClick={() => toggleItem(q.key, item)}>
+                      {item}
+                    </Pill>
+                  ))}
+                </div>
+                {q.hasWhen && e.items.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-500">مربوط به چه زمانی؟</p>
+                    <div className="flex flex-wrap gap-2">
+                      {WHEN_OPTIONS.map((w) => (
+                        <Pill key={w} on={e.when === w} onClick={() => patch(q.key, { when: e.when === w ? "" : w })}>
+                          {w}
+                        </Pill>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {!e.none && (
+                  <input
+                    className="border border-gray-200 rounded-xl p-2 text-sm w-full md:w-64"
+                    maxLength={30}
+                    placeholder={q.noteLabel}
+                    value={e.note}
+                    onChange={(ev) => patch(q.key, { note: ev.target.value })}
+                  />
+                )}
+              </div>
+            );
+          })}
+
+          <div className="space-y-2">
+            <button
+              onClick={save}
+              disabled={saving}
+              className="bg-brand-green text-white rounded-xl px-8 py-3 font-bold"
+            >
+              {saving ? "در حال ثبت..." : "ثبت و برگشت به منشی"}
+            </button>
+            {msg && <p className="text-sm text-red-600">{msg}</p>}
+          </div>
+        </div>
+      ) : visit.status === "referred" ? (
+        <p className="bg-yellow-50 text-yellow-700 rounded-2xl p-4 text-sm font-bold">
+          در انتظار دکتر. پس از تکمیل توسط دکتر، نتیجه اینجا نمایش داده می‌شود.
+        </p>
+      ) : (
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-400">نام جراح</p>
+              <p className="text-sm font-bold">{visit.surgeon_name || "-"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-400">هزینه جراحی</p>
+              <p className="text-sm font-bold">
+                {visit.surgery_cost != null ? visit.surgery_cost.toLocaleString("fa-IR") + " تومان" : "-"}
+              </p>
+            </div>
+          </div>
+          {HISTORY_QUESTIONS.map((q) => {
+            const e = visit.history?.[q.key];
+            return (
+              <div key={q.key}>
+                <p className="text-xs text-gray-400">{q.title}</p>
+                <p className="text-sm font-bold">
+                  {!e
+                    ? "-"
+                    : e.none
+                    ? NONE_LABEL
+                    : [e.items.join("، "), e.when, e.note].filter(Boolean).join(" | ")}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\visits\page.tsx
+import { requireRole, can } from "@/lib/permissions";
+import VisitsClient from "./VisitsClient";
+
+export const runtime = "edge";
+
+export default async function VisitsPage() {
+  const user = await requireRole(["scheduler", "manager", "doctor"]);
+  const canDoctor = can(user.role, "visits:doctor");
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-black">ویزیت‌های امروز</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          {canDoctor
+            ? "بیمارها به ترتیب نوبت ارجاع هستند. روی «شروع ویزیت» بزنید و فرم را تکمیل کنید."
+            : "بیمارهایی که به دکتر ارجاع داده‌اید و وضعیت‌شان. وقتی «تکمیل‌شده» شد، پرونده را باز کنید."}
+        </p>
+      </div>
+      <VisitsClient canDoctor={canDoctor} />
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\visits\VisitsClient.tsx
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+
+type Row = {
+  id: number;
+  patient_id: number;
+  status: "referred" | "completed";
+  referred_at: string;
+  first_name: string;
+  last_name: string;
+  age: number | null;
+  surgery_type: string | null;
+  daily_number: number;
+};
+
+// ساعت ارجاع به وقت تهران
+function timeOf(s: string) {
+  return new Date(s.replace(" ", "T") + "Z").toLocaleTimeString("fa-IR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Tehran",
+  });
+}
+
+export default function VisitsClient({ canDoctor }: { canDoctor: boolean }) {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [err, setErr] = useState("");
+
+  const load = useCallback(async () => {
+    const r = await fetch("/api/visits");
+    if (r.ok) {
+      setRows(await r.json());
+      setErr("");
+    } else {
+      setErr("خطا در دریافت لیست");
+    }
+  }, []);
+
+  // هر ۱۰ ثانیه لیست خودکار به‌روز می‌شود
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const waitingRows = rows.filter((r) => r.status === "referred");
+  const queueNo = new Map(waitingRows.map((r, i) => [r.id, i + 1]));
+  const next = waitingRows[0];
+
+  return (
+    <div className="bg-white rounded-[2rem] shadow-sm p-6 space-y-4">
+      <div className="flex flex-wrap items-center gap-6">
+        <p className="text-sm">
+          در انتظار دکتر: <b className="text-lg">{waitingRows.length.toLocaleString("fa-IR")}</b> نفر
+        </p>
+        {next && (
+          <p className="text-sm">
+            نفر بعدی: <b>{next.first_name} {next.last_name}</b>
+          </p>
+        )}
+        <p className="text-xs text-gray-400">این لیست هر ۱۰ ثانیه خودکار به‌روز می‌شود.</p>
+      </div>
+      {err && <p className="text-sm text-red-600">{err}</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-right">
+          <thead>
+            <tr className="text-gray-400 text-sm">
+              <th className="p-3">نوبت</th>
+              <th className="p-3">ساعت ارجاع</th>
+              <th className="p-3">شماره پرونده</th>
+              <th className="p-3">نام</th>
+              <th className="p-3">سن</th>
+              <th className="p-3">نوع جراحی</th>
+              <th className="p-3">وضعیت</th>
+              <th className="p-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {rows.map((r) => (
+              <tr key={r.id} className={queueNo.get(r.id) === 1 ? "bg-yellow-50" : ""}>
+                <td className="p-3 font-black">{queueNo.get(r.id)?.toLocaleString("fa-IR") ?? "-"}</td>
+                <td className="p-3 text-sm">{timeOf(r.referred_at)}</td>
+                <td className="p-3 font-bold">{r.daily_number}</td>
+                <td className="p-3 font-bold">{r.first_name} {r.last_name}</td>
+                <td className="p-3 text-sm">{r.age ?? "-"}</td>
+                <td className="p-3 text-sm">{r.surgery_type || "-"}</td>
+                <td className="p-3">
+                  {r.status === "referred" ? (
+                    <span className="bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full text-xs font-bold">در انتظار دکتر</span>
+                  ) : (
+                    <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-bold">تکمیل‌شده</span>
+                  )}
+                </td>
+                <td className="p-3">
+                  <Link
+                    href={`/dashboard/visits/${r.id}`}
+                    className={
+                      r.status === "referred" && canDoctor
+                        ? "bg-brand-green text-white px-4 py-2 rounded-full text-sm font-bold"
+                        : "border border-gray-200 px-4 py-2 rounded-full text-sm"
+                    }
+                  >
+                    {r.status === "referred"
+                      ? canDoctor
+                        ? "شروع ویزیت"
+                        : "مشاهده"
+                      : canDoctor
+                      ? "مشاهده / ویرایش"
+                      : "مشاهده پرونده"}
+                  </Link>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={8} className="p-6 text-center text-sm text-gray-400">
+                  امروز هنوز ارجاعی ثبت نشده. منشی از صفحه‌ی «بیماران» جلوی اسم بیمار «ارجاع به دکتر» را می‌زند.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\layout.tsx
+import { redirect } from "next/navigation";
+import { getSession } from "@/lib/session";
+import { can, HOME_BY_ROLE } from "@/lib/permissions";
+import LogoutButton from "./LogoutButton";
+import Shell, { type NavLink } from "./Shell";
+
+export const runtime = "edge";
+
+const ROLE_LABELS: Record<string, string> = {
+  manager: "مدیر",
+  doctor: "دکتر",
+  scheduler: "منشی",
+  visitor: "بازاریاب",
+  uploader: "عکاس",
+  nurse: "پرستار",
+};
+
+// همه صفحه‌های /dashboard فقط برای کاربر واردشده
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const user = await getSession();
+  if (!user) redirect("/login");
+
+  const links: (NavLink & { show: boolean })[] = [
+    { href: HOME_BY_ROLE[user.role] || "/dashboard", label: "صفحه اصلی", icon: "home", show: true },
+    { href: "/dashboard/patients", label: "بیماران", icon: "patients", show: can(user.role, "patients:read") },
+    { href: "/dashboard/visits", label: "ویزیت‌ها", icon: "visits", show: can(user.role, "visits:read") },
+    { href: "/dashboard/users", label: "مدیریت کاربران", icon: "users", show: can(user.role, "users:manage") },
+  ];
+
+  const dateFa = new Date().toLocaleDateString("fa-IR", {
+    timeZone: "Asia/Tehran",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <Shell
+      user={{ name: user.name, roleLabel: ROLE_LABELS[user.role] || user.role }}
+      links={links.filter((l) => l.show).map(({ href, label, icon }) => ({ href, label, icon }))}
+      dateFa={dateFa}
+      showSearch={can(user.role, "patients:read")}
+      logout={<LogoutButton />}
+    >
+      {children}
+    </Shell>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\LogoutButton.tsx
+"use client";
+
+export default function LogoutButton() {
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    location.href = "/login";
+  }
+  return (
+    <button onClick={logout} className="text-sm border px-4 py-1 rounded-full">
+      خروج
+    </button>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\Nav.tsx
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+export default function Nav({ links }: { links: { href: string; label: string }[] }) {
+  const path = usePathname();
+  return (
+    <nav className="flex flex-wrap gap-2">
+      {links.map((l, i) => {
+        // لینک اول «صفحه اصلی» است و فقط با آدرس دقیقش روشن می‌شود
+        const active = i === 0 ? path === l.href : path === l.href || path.startsWith(l.href + "/");
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-colors ${
+              active ? "bg-brand-green text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {l.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\Shell.tsx
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Users, ClipboardList, UserCog, Search, Menu, Stethoscope } from "lucide-react";
+
+const ICONS = {
+  home: LayoutDashboard,
+  patients: Users,
+  visits: ClipboardList,
+  users: UserCog,
+};
+
+export type NavLink = { href: string; label: string; icon: keyof typeof ICONS };
+
+export default function Shell({
+  user,
+  links,
+  dateFa,
+  showSearch,
+  logout,
+  children,
+}: {
+  user: { name: string; roleLabel: string };
+  links: NavLink[];
+  dateFa: string;
+  showSearch: boolean;
+  logout: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  const path = usePathname();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  // لینک اول «صفحه اصلی» است و فقط با آدرس دقیقش روشن می‌شود
+  const isActive = (l: NavLink, i: number) =>
+    i === 0 ? path === l.href : path === l.href || path.startsWith(l.href + "/");
+
+  function search(e: React.FormEvent) {
+    e.preventDefault();
+    const t = q.trim();
+    router.push("/dashboard/patients" + (t ? `?q=${encodeURIComponent(t)}` : ""));
+    setQ("");
+  }
+
+  const sidebar = (
+    <div className="flex h-full flex-col bg-forest text-white">
+      <div className="flex items-center gap-3 px-6 py-6">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-brand-green">
+          <Stethoscope size={22} />
+        </span>
+        <div className="leading-tight">
+          <p className="font-extrabold">مدیریت مطب</p>
+          <p className="text-xs text-white/60">نوبت و جراحی</p>
+        </div>
+      </div>
+
+      <nav className="flex-1 space-y-1 px-3">
+        {links.map((l, i) => {
+          const Icon = ICONS[l.icon];
+          const on = isActive(l, i);
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className={`relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
+                on ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              {on && <span className="absolute inset-y-2 start-0 w-1 rounded-full bg-brand-green" />}
+              <Icon size={20} />
+              {l.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="space-y-3 border-t border-white/10 p-4">
+        <div className="flex items-center gap-3">
+          <span className="grid h-10 w-10 place-items-center rounded-full bg-white/15 font-bold">
+            {user.name.trim().charAt(0) || "؟"}
+          </span>
+          <div className="leading-tight">
+            <p className="text-sm font-bold">{user.name}</p>
+            <p className="text-xs text-white/60">{user.roleLabel}</p>
+          </div>
+        </div>
+        <div className="[&_button]:w-full [&_button]:rounded-xl [&_button]:border [&_button]:border-white/20 [&_button]:px-4 [&_button]:py-2 [&_button]:text-sm [&_button]:text-white/80 [&_button]:hover:bg-white/10">
+          {logout}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-canvas">
+      {open && <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
+      <aside
+        className={`fixed inset-y-0 start-0 z-50 w-64 transition-transform duration-200 md:translate-x-0 ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        {sidebar}
+      </aside>
+
+      <div className="md:ms-64">
+        <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-canvas/80 px-4 py-3 backdrop-blur md:px-8">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            aria-label="باز کردن منو"
+            className="rounded-lg p-2 hover:bg-white md:hidden"
+          >
+            <Menu size={22} />
+          </button>
+          {showSearch && (
+            <form onSubmit={search} className="relative max-w-md flex-1">
+              <Search size={18} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="جستجوی بیمار با نام یا شماره..."
+                className="w-full rounded-xl border border-line bg-white py-2.5 ps-10 pe-4 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/20"
+              />
+            </form>
+          )}
+          <p className="ms-auto hidden text-sm text-gray-500 sm:block">{dateFa}</p>
+        </header>
+        <main className="px-4 py-6 md:px-8">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\dashboard\StatCard.tsx
+import Link from "next/link";
+
+export default function StatCard({
+  href,
+  title,
+  value,
+  hint,
+  accent,
+}: {
+  href: string;
+  title: string;
+  value: string;
+  hint: string;
+  accent?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`block bg-white p-6 rounded-[2rem] shadow-sm hover:shadow-md transition-shadow ${
+        accent ? "ring-2 ring-brand-green" : ""
+      }`}
+    >
+      <p className="text-gray-500 text-sm mb-1">{title}</p>
+      <p className="text-4xl font-black">{value}</p>
+      <p className="text-xs text-gray-400 mt-2">{hint}</p>
+    </Link>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\login\page.tsx
+"use client";
+import React, { useState } from 'react';
+import { useRouter } from "next/navigation";
+import './ring.css';
+
+export default function LoginPage() {
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: formData.email, password: formData.password }),
+      });
+      const data = (await res.json()) as { success?: boolean; home?: string; error?: string };
+
+      if (data.success) {
+        router.push(data.home || "/");
+        router.refresh();
+      } else {
+        setError(data.error || "خطایی رخ داد");
+      }
+    } catch (err) {
+      setError("خطا در ارتباط با سرور");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-body">
+      <div className="ring">
+        <i style={{ "--clr": "#10b981" } as React.CSSProperties}></i>
+        <i style={{ "--clr": "#34d399" } as React.CSSProperties}></i>
+        <i style={{ "--clr": "#059669" } as React.CSSProperties}></i>
+        <div className="login-form-container">
+          <h2 style={{ color: "white" }}>ورود به پنل</h2>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+            
+            <div className="inputBx">
+              <input type="text" placeholder="ایمیل یا نام کاربری" required 
+                onChange={(e) => setFormData({...formData, email: e.target.value})} />
+            </div>
+
+            <div className="inputBx">
+              <input type="password" placeholder="رمز عبور" required 
+                onChange={(e) => setFormData({...formData, password: e.target.value})} />
+            </div>
+
+            {error && <p style={{ color: '#ff4d4d', fontSize: '12px', textAlign: 'center', margin: '5px 0' }}>{error}</p>}
+            
+            <div className="inputBx">
+              <button type="submit" disabled={loading} style={{ cursor: 'pointer' }}>
+                {loading ? "در حال پردازش..." : "ورود به پنل"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\layout.js
+import "@fontsource/vazirmatn/400.css";
+import "@fontsource/vazirmatn/500.css";
+import "@fontsource/vazirmatn/700.css";
+import "@fontsource/vazirmatn/800.css";
+import "./globals.css";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/sonner";
+
+export const metadata = {
+  title: "مدیریت هوشمند مطب",
+  description: "سیستم نوبت‌دهی و جراحی",
+};
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="fa" dir="rtl">
+      <body>
+        <TooltipProvider>{children}</TooltipProvider>
+        <Toaster position="top-center" richColors />
+      </body>
+    </html>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\app\page.js
+import Link from "next/link";
+
+export default function Home() {
+  return (
+    <div className="min-h-screen bg-[#f4f4f5] flex flex-col">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-[#10b981] rounded-xl shadow-lg shadow-emerald-200 flex items-center justify-center">
+              <span className="text-white font-black text-xl">M</span>
+            </div>
+            <span className="text-[#0a0a0a] font-black text-xl tracking-tight">پنل مدیریت پزشکی</span>
+          </div>
+          <Link href="/login" className="bg-[#0a0a0a] text-white px-8 py-2.5 rounded-full font-bold hover:bg-[#10b981] transition-all transform hover:scale-105 active:scale-95 shadow-md">
+            ورود اعضا
+          </Link>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col items-center">
+        {/* Hero Section */}
+        <section className="py-20 px-6 text-center max-w-4xl">
+          <h1 className="text-5xl md:text-7xl font-black text-[#0a0a0a] leading-[1.2] mb-8">
+            مدیریت هوشمند <br/>
+            <span className="text-[#10b981]">نوبت‌دهی و اتاق عمل</span>
+          </h1>
+          <p className="text-gray-500 text-lg md:text-xl leading-relaxed mb-10 max-w-2xl mx-auto">
+            یکپارچه‌سازی کامل برنامه‌های جراحی، مشاوره‌های آنلاین و پرونده بیماران با امنیت فوق‌العاده در بستر Cloudflare.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/login" className="bg-[#10b981] text-white px-10 py-5 rounded-[2rem] font-black text-lg shadow-2xl shadow-emerald-200 hover:brightness-110 transition-all">
+              شروع به کار (پنل ویزیتور)
+            </Link>
+          </div>
+        </section>
+
+        {/* Feature Cards */}
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl w-full px-6 pb-20">
+          {[
+            { t: "نوبت‌دهی جراحی", d: "برنامه‌ریزی دقیق اتاق عمل و لیست انتظار", i: "🏥" },
+            { t: "مشاوره آنلاین", d: "مدیریت زمان‌های مشاوره و ویزیت", i: "💬" },
+            { t: "آرشیو تصاویر", d: "ذخیره‌سازی ایمن عکس‌های قبل و بعد", i: "📸" }
+          ].map((item, index) => (
+            <div key={index} className="bg-white p-10 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-2xl transition-all group">
+              <div className="text-4xl mb-6 group-hover:scale-110 transition-transform">{item.i}</div>
+              <h3 className="text-xl font-bold text-[#0a0a0a] mb-3">{item.t}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">{item.d}</p>
+            </div>
+          ))}
+        </section>
+      </main>
+
+      <footer className="py-10 text-center text-gray-400 text-xs border-t border-gray-200 bg-white">
+        © ۲۰۲۴ مدیریت مطب | امنیت تضمین شده توسط لایه‌های دفاعی Cloudflare
+      </footer>
+    </div>
+  );
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\db.ts
+import { getRequestContext } from "@cloudflare/next-on-pages";
+
+// نوع ساده برای bindingها (DB = دیتابیس D1)
+export type Env = {
+  DB: any;
+  JWT_SECRET: string;
+  RESEND_API_KEY?: string;
+  MANAGER_EMAIL?: string;
+  SMS_API_KEY?: string;
+  SMS_SENDER?: string;
+  CRON_SECRET?: string;
+  MEDIA?: any; // R2 (مرحله ۴)
+};
+
+export function getEnv(): Env {
+  return getRequestContext().env as unknown as Env;
+}
+export function getDB() {
+  return getEnv().DB;
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\normalize.ts
+const FA = "۰۱۲۳۴۵۶۷۸۹";
+const AR = "٠١٢٣٤٥٦٧٨٩";
+
+// ارقام فارسی و عربی را به انگلیسی تبدیل می‌کند
+export function toEnDigits(s: string) {
+  return s
+    .replace(/[۰-۹]/g, (d) => String(FA.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String(AR.indexOf(d)));
+}
+
+// «ي» و «ك» عربی را فارسی می‌کند و فاصله‌های اضافه را حذف می‌کند
+export function normText(s: unknown) {
+  return String(s ?? "")
+    .replace(/ي/g, "ی")
+    .replace(/ك/g, "ک")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\password.ts
+// هش رمز با PBKDF2 (سازگار با Cloudflare؛ سقف مجاز تکرار ۱۰۰۰۰۰ است)
+const enc = new TextEncoder();
+const toHex = (b: ArrayBuffer | Uint8Array) =>
+  [...new Uint8Array(b as ArrayBuffer)].map((x) => x.toString(16).padStart(2, "0")).join("");
+const fromHex = (h: string) =>
+  new Uint8Array((h.match(/.{2}/g) || []).map((x) => parseInt(x, 16)));
+
+async function derive(password: string, salt: Uint8Array) {
+  const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
+  return crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: salt as BufferSource, iterations: 100000 },
+    key,
+    256
+  );
+}
+
+export async function hashPassword(password: string) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  return `${toHex(salt)}:${toHex(await derive(password, salt))}`;
+}
+
+export async function verifyPassword(password: string, stored: string) {
+  const [s, h] = (stored || "").split(":");
+  if (!s || !h) return false;
+  return toHex(await derive(password, fromHex(s))) === h;
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\permissions.ts
+import { redirect } from "next/navigation";
+import { getSession, SessionUser } from "./session";
+
+// manager = مدیر | doctor = دکتر | scheduler = منشی | visitor = ویزیتور/بازاریاب
+// uploader = عکاس | nurse = پرستار
+// مدیر و دکتر به همه‌چیز دسترسی دارند؛ بقیه فقط به آنچه اینجا نوشته شده.
+const MAP: Record<string, string[]> = {
+  "patients:read": ["scheduler", "visitor", "nurse", "uploader"],
+  "patients:write": ["scheduler", "visitor"],
+  "appointments:write": ["scheduler", "visitor"],
+  "visits:refer": ["scheduler"],
+  "visits:read": ["scheduler"],
+  "visits:doctor": [], // فقط دکتر/مدیر
+  "surgeries:write": ["scheduler"],
+  "photos:write": ["uploader"],
+  "photos:read": ["uploader", "nurse"],
+  "followups:write": ["nurse"],
+  "users:manage": [], // پروفایل کارمندان: فقط دکتر/مدیر
+};
+
+export function can(role: string, action: string) {
+  if (role === "manager" || role === "doctor") return true;
+  return (MAP[action] || []).includes(role);
+}
+
+// استفاده در API:
+//   const { user, error } = await guard("patients:write");
+//   if (error) return error;
+export async function guard(
+  action: string
+): Promise<{ user: SessionUser; error?: undefined } | { user?: undefined; error: Response }> {
+  const user = await getSession();
+  if (!user)
+    return { error: Response.json({ error: "ابتدا وارد شوید" }, { status: 401 }) };
+  if (!can(user.role, action))
+    return { error: Response.json({ error: "دسترسی ندارید" }, { status: 403 }) };
+  return { user };
+}
+
+// استفاده در صفحه‌ها (server component): اگر نقش مجاز نبود به لاگین می‌فرستد
+export async function requireRole(roles: string[]) {
+  const user = await getSession();
+  if (!user || !roles.includes(user.role)) redirect("/login");
+  return user;
+}
+
+// صفحه اصلی هر نقش بعد از ورود
+export const HOME_BY_ROLE: Record<string, string> = {
+  manager: "/dashboard/manager",
+  doctor: "/dashboard/manager",
+  scheduler: "/dashboard/scheduler",
+  visitor: "/dashboard/visitor",
+  uploader: "/dashboard/uploader",
+  nurse: "/dashboard/nurse",
+};
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\session.ts
+import { SignJWT, jwtVerify } from "jose";
+import { cookies } from "next/headers";
+import { getEnv } from "./db";
+
+export const COOKIE = "auth_token";
+
+export type SessionUser = { uid: number; role: string; name: string };
+
+function secretKey() {
+  const s = getEnv().JWT_SECRET;
+  if (!s || s.length < 32) throw new Error("JWT_SECRET تنظیم نشده یا کوتاه است (حداقل ۳۲ کاراکتر)");
+  return new TextEncoder().encode(s);
+}
+
+export async function createSession(user: { id: number; role: string; full_name: string }) {
+  const token = await new SignJWT({ uid: user.id, role: user.role, name: user.full_name })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("12h")
+    .sign(secretKey());
+  (await cookies()).set(COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 12,
+    secure: process.env.NODE_ENV === "production",
+  });
+}
+
+export async function getSession(): Promise<SessionUser | null> {
+  const token = (await cookies()).get(COOKIE)?.value;
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secretKey());
+    const uid = Number(payload.uid);
+    // وضعیت و نقش را از دیتابیس می‌گیریم تا غیرفعال‌سازی فوری اعمال شود
+    const row = await getEnv()
+      .DB.prepare("SELECT role, full_name, active FROM users WHERE id = ?")
+      .bind(uid)
+      .first();
+    if (!row || !row.active) return null;
+    return { uid, role: String(row.role), name: String(row.full_name || "") };
+  } catch {
+    return null;
+  }
+}
+
+export async function destroySession() {
+  (await cookies()).delete(COOKIE);
+}
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\utils.ts
+export { cn } from "cn"
+
+===== C:\Users\Fatima\appmedical\clinic-app\src\lib\visit-options.ts
+// گزینه‌های فرم دکتر. برای اضافه یا کم کردن گزینه فقط همین فایل را ویرایش کنید.
+
+export const NONE_LABEL = "ندارد";
+
+export const WHEN_OPTIONS = ["کمتر از ۶ ماه", "۶ تا ۱۲ ماه", "۱ تا ۵ سال", "بیش از ۵ سال"];
+
+export type HistoryKey = "diseases" | "meds" | "surgeries" | "injections" | "tattoo" | "substances";
+
+export type HistoryQuestion = {
+  key: HistoryKey;
+  title: string; // عنوان سؤال
+  items: string[]; // گزینه‌های تیک‌خور
+  hasWhen: boolean; // آیا «زمان» هم پرسیده شود
+  noteLabel: string; // عنوان کادر یک‌کلمه‌ای
+};
+
+export const HISTORY_QUESTIONS: HistoryQuestion[] = [
+  {
+    key: "diseases",
+    title: "سوابق بیماری‌ها و زمان آن",
+    items: [
+      "دیابت",
+      "فشار خون",
+      "بیماری قلبی",
+      "بیماری کلیه",
+      "بیماری کبد",
+      "آسم یا بیماری ریوی",
+      "اختلال انعقاد خون",
+      "بیماری تیروئید",
+      "صرع",
+      "بیماری خودایمنی",
+    ],
+    hasWhen: true,
+    noteLabel: "سایر (یک کلمه)",
+  },
+  {
+    key: "meds",
+    title: "سوابق مصرف دارو و زمان آن",
+    items: [
+      "مسکن و ضدالتهاب",
+      "آسپرین یا رقیق‌کننده خون",
+      "داروی فشار خون",
+      "داروی دیابت",
+      "داروی هورمونی",
+      "داروی روان‌پزشکی",
+      "ایزوترتینوئین (روآکوتان)",
+      "کورتون",
+    ],
+    hasWhen: true,
+    noteLabel: "سایر (یک کلمه)",
+  },
+  {
+    key: "surgeries",
+    title: "سوابق جراحی‌های قبلی و زمان آن",
+    items: ["جراحی بینی", "جراحی پلک", "لیپوساکشن", "جراحی شکم", "جراحی سینه", "جراحی صورت", "سایر جراحی‌ها"],
+    hasWhen: true,
+    noteLabel: "نام جراحی (یک کلمه)",
+  },
+  {
+    key: "injections",
+    title: "سابقه تزریق ژل و آنزیم",
+    items: ["ژل", "آنزیم"],
+    hasWhen: true,
+    noteLabel: "محل تزریق (یک کلمه)",
+  },
+  {
+    key: "tattoo",
+    title: "خالکوبی یا تتو",
+    items: ["دارد"],
+    hasWhen: false,
+    noteLabel: "محل (یک کلمه)",
+  },
+  {
+    key: "substances",
+    title: "دخانیات / مشروبات الکلی / مواد مخدر",
+    items: ["دخانیات (سیگار/قلیان)", "مشروبات الکلی", "مواد مخدر"],
+    hasWhen: false,
+    noteLabel: "شرح (یک کلمه)",
+  },
+];
+
+===== C:\Users\Fatima\appmedical\clinic-app\migrations\0001_auth_roles.sql
+-- مرحله ۱: جدول کاربران جدید با هش رمز و نقش‌های کامل
+-- نقش‌ها: manager=مدیر، doctor=دکتر، scheduler=منشی، visitor=ویزیتور/بازاریاب، uploader=عکاس، nurse=پرستار
+-- هشدار: جدول قدیمی users پاک می‌شود (رمزها متن ساده بودند و قابل نگه‌داشتن نیستند)
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE NOT NULL,
+  email TEXT UNIQUE,
+  password_hash TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK(role IN ('manager','doctor','scheduler','visitor','uploader','nurse')),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+===== C:\Users\Fatima\appmedical\clinic-app\migrations\0002_patients.sql
+-- مرحله ۲: بازسازی جدول بیماران با فیلدهای جدید
+-- هشدار: جدول‌های بیمار، نوبت و تصاویر پاک و دوباره ساخته می‌شوند (فقط چون خالی بودند)
+-- جدول users دست نمی‌خورد
+
+DROP TABLE IF EXISTS patient_media;
+DROP TABLE IF EXISTS appointments;
+DROP TABLE IF EXISTS patients;
+
+CREATE TABLE patients (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  daily_number INTEGER NOT NULL,          -- شماره پرونده روز (هر روز از ۱ شروع می‌شود)
+  admission_date TEXT NOT NULL,           -- تاریخ پذیرش، به شکل YYYY-MM-DD
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  phone TEXT NOT NULL,                    -- موبایل (برای پیامک)
+  landline TEXT,                          -- شماره ثابت
+  father_name TEXT,
+  age INTEGER,
+  job TEXT,
+  marital_status TEXT,
+  residence_area TEXT,                    -- محدوده محل سکونت
+  surgery_type TEXT,                      -- نوع جراحی
+  referral_source TEXT,                   -- نحوه آشنایی
+  notes TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (admission_date, daily_number)
+);
+
+CREATE INDEX idx_patients_name ON patients(last_name, first_name);
+CREATE INDEX idx_patients_phone ON patients(phone);
+
+CREATE TABLE appointments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  patient_id INTEGER,
+  type TEXT CHECK(type IN ('consultation', 'surgery')) NOT NULL,
+  appointment_date DATETIME NOT NULL,
+  status TEXT DEFAULT 'pending',
+  description TEXT,
+  FOREIGN KEY (patient_id) REFERENCES patients(id)
+);
+
+CREATE TABLE patient_media (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  patient_id INTEGER,
+  image_url TEXT NOT NULL,
+  image_type TEXT CHECK(image_type IN ('before', 'after')) NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (patient_id) REFERENCES patients(id)
+);
+
+===== C:\Users\Fatima\appmedical\clinic-app\migrations\0003_visits.sql
+-- مرحله ۳: ویزیت‌ها (ارجاع منشی، فرم دکتر، تکمیل منشی)
+-- این فایل چیزی را پاک نمی‌کند، فقط یک جدول جدید می‌سازد
+
+CREATE TABLE visits (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  visit_date TEXT NOT NULL,                -- تاریخ ویزیت، YYYY-MM-DD
+  status TEXT NOT NULL DEFAULT 'referred'
+    CHECK(status IN ('referred', 'completed')),
+
+  -- ارجاع توسط منشی
+  referred_by INTEGER REFERENCES users(id),
+  referred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  -- بخش دکتر
+  doctor_id INTEGER REFERENCES users(id),
+  surgeon_name TEXT,                       -- نام جراح
+  surgery_cost INTEGER,                    -- هزینه جراحی (تومان)
+  history TEXT,                            -- سوابق (JSON)
+  completed_at DATETIME,
+
+  -- بخش منشی بعد از دکتر
+  surgery_date TEXT,                       -- تاریخ جراحی
+  reservation_fee INTEGER,                 -- هزینه رزرو (تومان)
+  photography_fee INTEGER,                 -- هزینه فتوگرافی پزشکی (تومان)
+  updated_by INTEGER REFERENCES users(id),
+  updated_at DATETIME
+);
+
+CREATE INDEX idx_visits_date_status ON visits(visit_date, status);
+CREATE INDEX idx_visits_patient ON visits(patient_id);

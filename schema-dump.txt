@@ -1,0 +1,44 @@
+﻿
+ ظؤàي╕ wrangler 4.151.0
+ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤ظ¤
+Resource location: local 
+
+Use --remote if you want to access the remote instance.
+
+≡اî Executing on local database clinic-db (e0c7e7fb-4f2e-441c-a373-6b63319f22cc) from .wrangler\state\v3\d1:
+≡اî To execute on your remote database, add a --remote flag to your wrangler command.
+≡اأث 1 command executed successfully.
+[
+  {
+    "results": [
+      {
+        "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+      },
+      {
+        "sql": "CREATE TABLE _cf_METADATA (\n        key INTEGER PRIMARY KEY,\n        value BLOB\n      )"
+      },
+      {
+        "sql": "CREATE TABLE \"d1_migrations\"(\n\t\tid         INTEGER PRIMARY KEY AUTOINCREMENT,\n\t\tname       TEXT UNIQUE,\n\t\tapplied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL\n)"
+      },
+      {
+        "sql": "CREATE TABLE users (\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\n  username TEXT UNIQUE NOT NULL,\n  email TEXT UNIQUE,\n  password_hash TEXT NOT NULL,\n  full_name TEXT NOT NULL,\n  role TEXT NOT NULL CHECK(role IN ('manager','doctor','scheduler','visitor','uploader','nurse')),\n  active INTEGER NOT NULL DEFAULT 1,\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n)"
+      },
+      {
+        "sql": "CREATE TABLE patients (\r\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n  daily_number INTEGER NOT NULL,          -- ╪┤┘à╪د╪▒┘ç ┘╛╪▒┘ê┘╪»┘ç ╪▒┘ê╪▓ (┘ç╪▒ ╪▒┘ê╪▓ ╪د╪▓ █▒ ╪┤╪▒┘ê╪╣ ┘à█îظî╪┤┘ê╪»)\r\n  admission_date TEXT NOT NULL,           -- ╪ز╪د╪▒█î╪« ┘╛╪░█î╪▒╪┤╪î ╪ذ┘ç ╪┤┌ر┘ YYYY-MM-DD\r\n  first_name TEXT NOT NULL,\r\n  last_name TEXT NOT NULL,\r\n  phone TEXT NOT NULL,                    -- ┘à┘ê╪ذ╪د█î┘ (╪ذ╪▒╪د█î ┘╛█î╪د┘à┌ر)\r\n  landline TEXT,                          -- ╪┤┘à╪د╪▒┘ç ╪س╪د╪ذ╪ز\r\n  father_name TEXT,\r\n  age INTEGER,\r\n  job TEXT,\r\n  marital_status TEXT,\r\n  residence_area TEXT,                    -- ┘à╪ص╪»┘ê╪»┘ç ┘à╪ص┘ ╪│┌ر┘ê┘╪ز\r\n  surgery_type TEXT,                      -- ┘┘ê╪╣ ╪ش╪▒╪د╪ص█î\r\n  referral_source TEXT,                   -- ┘╪ص┘ê┘ç ╪ت╪┤┘╪د█î█î\r\n  notes TEXT,\r\n  created_by INTEGER REFERENCES users(id),\r\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\r\n  UNIQUE (admission_date, daily_number)\r\n)"
+      },
+      {
+        "sql": "CREATE TABLE appointments (\r\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n  patient_id INTEGER,\r\n  type TEXT CHECK(type IN ('consultation', 'surgery')) NOT NULL,\r\n  appointment_date DATETIME NOT NULL,\r\n  status TEXT DEFAULT 'pending',\r\n  description TEXT,\r\n  FOREIGN KEY (patient_id) REFERENCES patients(id)\r\n)"
+      },
+      {
+        "sql": "CREATE TABLE patient_media (\r\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n  patient_id INTEGER,\r\n  image_url TEXT NOT NULL,\r\n  image_type TEXT CHECK(image_type IN ('before', 'after')) NOT NULL,\r\n  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\r\n  FOREIGN KEY (patient_id) REFERENCES patients(id)\r\n)"
+      },
+      {
+        "sql": "CREATE TABLE visits (\r\n  id INTEGER PRIMARY KEY AUTOINCREMENT,\r\n  patient_id INTEGER NOT NULL REFERENCES patients(id),\r\n  visit_date TEXT NOT NULL,                -- ╪ز╪د╪▒█î╪« ┘ê█î╪▓█î╪ز╪î YYYY-MM-DD\r\n  status TEXT NOT NULL DEFAULT 'referred'\r\n    CHECK(status IN ('referred', 'completed')),\r\n\r\n  -- ╪د╪▒╪ش╪د╪╣ ╪ز┘ê╪│╪╖ ┘à┘╪┤█î\r\n  referred_by INTEGER REFERENCES users(id),\r\n  referred_at DATETIME DEFAULT CURRENT_TIMESTAMP,\r\n\r\n  -- ╪ذ╪«╪┤ ╪»┌ر╪ز╪▒\r\n  doctor_id INTEGER REFERENCES users(id),\r\n  surgeon_name TEXT,                       -- ┘╪د┘à ╪ش╪▒╪د╪ص\r\n  surgery_cost INTEGER,                    -- ┘ç╪▓█î┘┘ç ╪ش╪▒╪د╪ص█î (╪ز┘ê┘à╪د┘)\r\n  history TEXT,                            -- ╪│┘ê╪د╪ذ┘é (JSON)\r\n  completed_at DATETIME,\r\n\r\n  -- ╪ذ╪«╪┤ ┘à┘╪┤█î ╪ذ╪╣╪» ╪د╪▓ ╪»┌ر╪ز╪▒\r\n  surgery_date TEXT,                       -- ╪ز╪د╪▒█î╪« ╪ش╪▒╪د╪ص█î\r\n  reservation_fee INTEGER,                 -- ┘ç╪▓█î┘┘ç ╪▒╪▓╪▒┘ê (╪ز┘ê┘à╪د┘)\r\n  photography_fee INTEGER,                 -- ┘ç╪▓█î┘┘ç ┘╪ز┘ê┌»╪▒╪د┘█î ┘╛╪▓╪┤┌ر█î (╪ز┘ê┘à╪د┘)\r\n  updated_by INTEGER REFERENCES users(id),\r\n  updated_at DATETIME\r\n)"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "duration": 0
+    }
+  }
+]

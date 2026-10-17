@@ -1,0 +1,4 @@
+# --- این خط‌ها را به انتهای .gitignore اضافه کن ---
+.wrangler/
+.dev.vars
+.vercel/

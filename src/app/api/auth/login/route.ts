@@ -1,30 +1,29 @@
-import { getRequestContext } from "@cloudflare/next-on-pages";
+import { getDB } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
+import { createSession } from "@/lib/session";
+import { HOME_BY_ROLE } from "@/lib/permissions";
 
 export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
-    const { username, password } = await request.json();
-    const { env } = getRequestContext();
-    const db = env.DB;
+    const { username, password } = (await request.json()) as { username?: string; password?: string };
+    if (!username || !password)
+      return Response.json({ success: false, error: "نام کاربری و رمز را وارد کنید" }, { status: 400 });
 
-    if (!db) {
-      return new Response(JSON.stringify({ success: false, error: "دیتابیس شناسایی نشد" }), { status: 500 });
-    }
+    const db = getDB();
+    const user = await db
+      .prepare("SELECT * FROM users WHERE (username = ?1 OR email = ?1) AND active = 1")
+      .bind(username.trim())
+      .first();
 
-    const user = await db.prepare("SELECT * FROM users WHERE username = ?").bind(username).first();
+    // پیام یکسان برای «کاربر نیست» و «رمز غلط» (کسی نتواند حدس بزند کدام حساب وجود دارد)
+    if (!user || !(await verifyPassword(password, user.password_hash)))
+      return Response.json({ success: false, error: "نام کاربری یا رمز عبور اشتباه است" }, { status: 401 });
 
-    if (!user) {
-      return new Response(JSON.stringify({ success: false, error: "کاربر یافت نشد" }), { status: 401 });
-    }
-
-    if (user.password !== password) {
-      return new Response(JSON.stringify({ success: false, error: "رمز عبور غلط است" }), { status: 401 });
-    }
-
-    return new Response(JSON.stringify({ success: true, role: user.role }));
-  } catch (error: any) {
-    // اینجا خطای واقعی را می‌فرستیم تا بفهمیم مشکل چیست
-    return new Response(JSON.stringify({ success: false, error: "خطای فنی: " + error.message }), { status: 500 });
+    await createSession(user);
+    return Response.json({ success: true, role: user.role, home: HOME_BY_ROLE[user.role] || "/" });
+  } catch {
+    return Response.json({ success: false, error: "خطا در برقراری ارتباط" }, { status: 500 });
   }
 }
