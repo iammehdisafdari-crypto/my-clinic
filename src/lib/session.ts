@@ -23,7 +23,7 @@ export async function createSession(user: { id: number; role: string; full_name?
     .setExpirationTime("12h")
     .sign(secretKey());
 
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   cookieStore.set(COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
@@ -35,7 +35,7 @@ export async function createSession(user: { id: number; role: string; full_name?
 
 export async function getSession(): Promise<SessionUser | null> {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     const token = cookieStore.get(COOKIE)?.value;
     if (!token) return null;
 
@@ -56,7 +56,6 @@ export async function getSession(): Promise<SessionUser | null> {
       }
     } catch {}
 
-    // در صورت قطعی لحظه‌ای دیتابیس، از دیتای امضاشده JWT استفاده کند تا کاربر لاگ‌اوت نشود
     return {
       uid,
       role: String(payload.role || "admin"),
@@ -69,7 +68,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
 export async function destroySession() {
   try {
-    const cookieStore = await cookies();
+    const cookieStore = cookies();
     cookieStore.delete(COOKIE);
   } catch {}
 }
