@@ -20,7 +20,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
 const ACTION_ROLES: Record<string, string[]> = {
   "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader"],
   "patients:write": ["admission", "scheduler", "visitor"],
-  "appointments:write": ["admission", "scheduler", "visitor"],
+  "appointments:write": ["admission", "scheduler", "visitor", "nurse"],
   "visits:refer": ["admission", "scheduler"],
   "visits:read": ["admission", "nurse", "scheduler"],
   "visits:doctor": ["doctor"],

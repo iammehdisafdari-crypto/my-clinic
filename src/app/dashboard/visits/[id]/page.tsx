@@ -5,7 +5,7 @@ import VisitDetail from "./VisitDetail";
 export const runtime = "edge";
 
 export default async function VisitPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireRole(["scheduler", "manager", "doctor"]);
+  const user = await requireRole(["scheduler", "nurse", "manager", "doctor"]);
   const { id } = await params;
   return (
     <div className="space-y-6">

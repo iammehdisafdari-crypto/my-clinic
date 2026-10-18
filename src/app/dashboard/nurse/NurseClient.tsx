@@ -118,16 +118,15 @@ export default function NurseClient() {
 
     setLoading(true);
     const serviceLabel = NURSE_SERVICES.find((s) => s.id === serviceType)?.label;
-    const res = await fetch("/api/surgeries", {
+    const res = await fetch("/api/appointments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         patient_id: selectedPatient.id,
+        type: "consultation",
         appointment_date: aptDate,
         appointment_time: aptTime,
-        hospital_name: "مطب تخصصی",
-        hospital_address: "کلینیک",
-        description: `[خدمت پرستاری: ${serviceLabel}] ${notes}`.trim(),
+        description: `[خدمت پرستاری: ${serviceLabel}]${notes ? ` ${notes}` : ""}`,
       }),
     });
 
@@ -210,28 +209,88 @@ export default function NurseClient() {
               <span className="text-xs font-mono">پرونده: {p.daily_number}</span>
             </div>
           ))}
+          {patients.length === 0 && (
+            <p className="text-xs text-gray-400 text-center py-4">
+              {search.trim()
+                ? "بیماری با این نام یا شماره پرونده پیدا نشد."
+                : "برای جستجوی پرونده‌های قدیمی، نام یا شماره پرونده را وارد کنید."}
+            </p>
+          )}
         </div>
       </div>
 
       {/* پنل تخصصی پرستار */}
       <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-6">
-        <h2 className="text-lg font-black text-gray-900">مدیریت کلینیکال و پرونده بیمار</h2>
+        <h2 className="text-lg font-black text-gray-900">نوبت خدمات پرستاری و مدیریت پرونده بیمار</h2>
+
+        {selectedPatient ? (
+          <div className="bg-emerald-50 p-4 rounded-2xl text-sm font-bold text-emerald-900 flex justify-between items-center border border-emerald-100">
+            <span>
+              بیمار انتخاب‌شده: {selectedPatient.first_name} {selectedPatient.last_name} — {selectedPatient.phone}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedPatient(null)}
+              className="text-xs text-red-600 hover:text-red-700 underline font-medium"
+            >
+              تغییر بیمار
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-xl">
+            برای ثبت نوبت، ابتدا بیمار را در بخش «انتخاب بیمار» جستجو و انتخاب کنید.
+          </p>
+        )}
+
+        <form onSubmit={handleBookNurseService} className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
+          <p className="font-bold text-sm text-gray-800">ثبت نوبت خدمت پرستاری</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              className={inputClass}
+              value={serviceType}
+              onChange={(e) => setServiceType(e.target.value)}
+            >
+              {NURSE_SERVICES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <JalaliDatePicker
+              value={aptDate}
+              onChange={(gDate) => setAptDate(gDate)}
+              className={inputClass}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              type="time"
+              value={aptTime}
+              onChange={(e) => setAptTime(e.target.value)}
+              className={inputClass}
+              required
+            />
+            <input
+              className={inputClass}
+              placeholder="توضیحات تکمیلی..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !selectedPatient}
+            className="w-full bg-brand-green text-white font-bold p-3 rounded-xl shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50"
+          >
+            ثبت نوبت خدمت پرستاری
+          </button>
+        </form>
 
         {selectedPatient ? (
           <div className="space-y-6">
-            <div className="bg-emerald-50 p-4 rounded-2xl text-sm font-bold text-emerald-900 flex justify-between items-center border border-emerald-100">
-              <span>
-                بیمار: {selectedPatient.first_name} {selectedPatient.last_name}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedPatient(null)}
-                className="text-xs text-red-600 hover:text-red-700 underline font-medium"
-              >
-                تغییر بیمار
-              </button>
-            </div>
-
             {/* ثبت علائم حیاتی */}
             <form onSubmit={handleSaveVitals} className="space-y-3 bg-gray-50 p-4 rounded-2xl border border-gray-100">
               <p className="font-bold text-sm text-gray-800">ثبت علائم حیاتی</p>
@@ -284,54 +343,6 @@ export default function NurseClient() {
                 )}
               </div>
             </div>
-
-            {/* نوبت‌دهی خدمات پرستاری با تقویم شمسی */}
-            <form onSubmit={handleBookNurseService} className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
-              <p className="font-bold text-sm text-gray-800">ثبت نوبت / خدمت پرستاری</p>
-
-              <div className="grid grid-cols-2 gap-3">
-                <select
-                  className={inputClass}
-                  value={serviceType}
-                  onChange={(e) => setServiceType(e.target.value)}
-                >
-                  {NURSE_SERVICES.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-                <JalaliDatePicker
-                  value={aptDate}
-                  onChange={(gDate) => setAptDate(gDate)}
-                  className={inputClass}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="time"
-                  value={aptTime}
-                  onChange={(e) => setAptTime(e.target.value)}
-                  className={inputClass}
-                  required
-                />
-                <input
-                  className={inputClass}
-                  placeholder="توضیحات تکمیلی..."
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-brand-green text-white font-bold p-3 rounded-xl shadow-md hover:bg-emerald-700 transition-colors"
-              >
-                ثبت خدمت / نوبت
-              </button>
-            </form>
 
             {/* ثبت عکس وضعیت فعلی */}
             <form onSubmit={handleUploadCurrentPhoto} className="space-y-3 bg-emerald-50/40 p-5 rounded-2xl border border-emerald-100">

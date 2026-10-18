@@ -48,6 +48,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "بیمار نامعتبر است" }, { status: 400 });
   if (type !== "consultation" && type !== "surgery")
     return Response.json({ error: "نوع نوبت نامعتبر است" }, { status: 400 });
+  if (user.role === "nurse" && type !== "consultation")
+    return Response.json({ error: "پرستار فقط می‌تواند نوبت خدمات پرستاری ثبت کند" }, { status: 403 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(appointment_date))
     return Response.json({ error: "تاریخ نامعتبر است" }, { status: 400 });
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time))
