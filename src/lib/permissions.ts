@@ -1,31 +1,25 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import { getSession, SessionUser } from "./session";
 
-// manager = مدیر | doctor = دکتر | scheduler = منشی | visitor = ویزیتور/بازاریاب
-// uploader = عکاس | nurse = پرستار
-// مدیر و دکتر به همه‌چیز دسترسی دارند؛ بقیه فقط به آنچه اینجا نوشته شده.
 const MAP: Record<string, string[]> = {
   "patients:read": ["scheduler", "visitor", "nurse", "uploader"],
   "patients:write": ["scheduler", "visitor"],
   "appointments:write": ["scheduler", "visitor"],
   "visits:refer": ["scheduler"],
   "visits:read": ["scheduler"],
-  "visits:doctor": [], // فقط دکتر/مدیر
+  "visits:doctor": [],
   "surgeries:write": ["scheduler"],
   "photos:write": ["uploader"],
   "photos:read": ["uploader", "nurse"],
   "followups:write": ["nurse"],
-  "users:manage": [], // پروفایل کارمندان: فقط دکتر/مدیر
+  "users:manage": [],
 };
 
 export function can(role: string, action: string) {
-  if (role === "manager" || role === "doctor") return true;
+  if (role === "manager" || role === "admin" || role === "doctor") return true;
   return (MAP[action] || []).includes(role);
 }
 
-// استفاده در API:
-//   const { user, error } = await guard("patients:write");
-//   if (error) return error;
 export async function guard(
   action: string
 ): Promise<{ user: SessionUser; error?: undefined } | { user?: undefined; error: Response }> {
@@ -37,15 +31,16 @@ export async function guard(
   return { user };
 }
 
-// استفاده در صفحه‌ها (server component): اگر نقش مجاز نبود به لاگین می‌فرستد
 export async function requireRole(roles: string[]) {
   const user = await getSession();
-  if (!user || !roles.includes(user.role)) redirect("/login");
+  if (!user || (!roles.includes(user.role) && user.role !== "admin" && user.role !== "manager")) {
+    redirect("/login");
+  }
   return user;
 }
 
-// صفحه اصلی هر نقش بعد از ورود
 export const HOME_BY_ROLE: Record<string, string> = {
+  admin: "/dashboard/manager",
   manager: "/dashboard/manager",
   doctor: "/dashboard/manager",
   scheduler: "/dashboard/scheduler",

@@ -1,21 +1,14 @@
 ﻿export const runtime = "edge";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { getSession } from "@/lib/session";
+import { HOME_BY_ROLE } from "@/lib/permissions";
 
 export default async function Home() {
-  let token = null;
-  try {
-    const cookieStore = await cookies();
-    token = cookieStore.get("auth_token")?.value;
-  } catch (e) {
-    token = null;
-  }
-
-  // اگر توکن ورود وجود ندارد، مستقیماً به صفحه لاگین هدایت شو تا ارور ۵۰۰ رخ ندهد
-  if (!token) {
+  const user = await getSession();
+  if (!user) {
     redirect("/login");
   }
 
-  // اگر توکن داشت به داشبورد هدایت شود
-  redirect("/dashboard");
+  const dest = HOME_BY_ROLE[user.role] || "/dashboard/manager";
+  redirect(dest);
 }
