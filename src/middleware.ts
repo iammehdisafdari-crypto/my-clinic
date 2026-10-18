@@ -1,17 +1,21 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// فقط یک «دربان ساده»: اگر کوکی ورود نیست، به صفحه لاگین می‌فرستد.
-// بررسی واقعی نقش و اعتبار توکن در خود API/صفحه‌ها انجام می‌شود (guard / requireRole).
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const needsLogin = pathname.startsWith("/dashboard") || pathname.startsWith("/api/users");
-  if (needsLogin && !req.cookies.get("auth_token")) {
-    if (pathname.startsWith("/api/"))
-      return Response.json({ error: "ابتدا وارد شوید" }, { status: 401 });
-    return NextResponse.redirect(new URL("/login", req.url));
+  const token = req.cookies.get("auth_token")?.value;
+
+  // اگر کاربر قصد ورود به پنل را دارد و توکن ندارد، ریدایرکت مستقیم به لاگین
+  if (pathname.startsWith("/dashboard") || pathname.startsWith("/admin")) {
+    if (!token) {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
   }
+
+  // اگر کاربر روی صفحه اصلی یا روت لاگین است و لاگین نیست، اجازه دسترسی بده
   return NextResponse.next();
 }
 
-export const config = { matcher: ["/dashboard/:path*", "/api/users/:path*"] };
+export const config = {
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+};
