@@ -52,6 +52,7 @@ export default function NurseClient() {
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
   const [vitalsList, setVitalsList] = useState<VitalItem[]>([]);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
@@ -185,6 +186,30 @@ export default function NurseClient() {
       if (mRes.ok) setMediaList(await mRes.json());
     } else {
       setMsg("خطا در ثبت عکس وضعیت فعلی");
+    }
+  }
+
+  async function handleDeleteMedia(media: MediaItem) {
+    if (!selectedPatient || !window.confirm("این مستند برای همیشه از پرونده بیمار حذف شود؟")) return;
+    setDeletingMediaId(media.id);
+    setMsg("");
+    try {
+      const res = await fetch(
+        `/api/patients/${selectedPatient.id}/media?media_id=${media.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error || "حذف مستند انجام نشد. دوباره تلاش کنید.");
+        return;
+      }
+      setMediaList((items) => items.filter((item) => item.id !== media.id));
+      if (expandedImage === media.image_url) setExpandedImage(null);
+      setMsg("مستند از پرونده بیمار حذف شد.");
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
+    } finally {
+      setDeletingMediaId(null);
     }
   }
 
@@ -559,6 +584,14 @@ export default function NurseClient() {
                         alt="مدیا پرونده"
                         className="w-full h-20 object-cover rounded-lg"
                       />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMedia(m)}
+                      disabled={deletingMediaId === m.id}
+                      className="w-full rounded-lg bg-red-50 px-1.5 py-1 text-[10px] font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {deletingMediaId === m.id ? "در حال حذف..." : "حذف"}
                     </button>
                     <span className="text-[10px] text-gray-400 block text-center font-mono">
                       {toJalaliDate(m.created_at)}

@@ -57,3 +57,25 @@ export async function POST(request: Request, ctx: Ctx) {
     return Response.json({ error: "خطا در پردازش تصویر" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request, ctx: Ctx) {
+  const { error } = await guard("photos:delete");
+  if (error) return error;
+
+  const patientId = Number((await ctx.params).id);
+  const mediaId = Number(new URL(request.url).searchParams.get("media_id"));
+  if (!Number.isInteger(patientId) || patientId <= 0 || !Number.isInteger(mediaId) || mediaId <= 0)
+    return Response.json({ error: "شناسه تصویر یا بیمار نامعتبر است" }, { status: 400 });
+
+  try {
+    const result = await getDB()
+      .prepare("DELETE FROM patient_media WHERE id = ? AND patient_id = ?")
+      .bind(mediaId, patientId)
+      .run();
+    if (!result.meta.changes) return Response.json({ error: "تصویر پیدا نشد" }, { status: 404 });
+    return Response.json({ ok: true });
+  } catch (err) {
+    console.error("PATIENT_MEDIA_DELETE_ERROR:", err);
+    return Response.json({ error: "حذف تصویر انجام نشد. دوباره تلاش کنید" }, { status: 500 });
+  }
+}

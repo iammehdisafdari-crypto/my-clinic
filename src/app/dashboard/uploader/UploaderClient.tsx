@@ -24,6 +24,7 @@ export default function UploaderClient() {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
   
   const [file, setFile] = useState<File | null>(null);
   const [imageType, setImageType] = useState<"before" | "after">("before");
@@ -80,6 +81,30 @@ export default function UploaderClient() {
       if (mRes.ok) setMediaList(await mRes.json());
     } else {
       setMsg(data.error || "خطا در ثبت تصویر");
+    }
+  }
+
+  async function handleDeleteMedia(media: MediaItem) {
+    if (!selectedPatient || !window.confirm("این مستند برای همیشه از پرونده بیمار حذف شود؟")) return;
+    setDeletingMediaId(media.id);
+    setMsg("");
+    try {
+      const res = await fetch(
+        `/api/patients/${selectedPatient.id}/media?media_id=${media.id}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(data.error || "حذف مستند انجام نشد. دوباره تلاش کنید.");
+        return;
+      }
+      setMediaList((items) => items.filter((item) => item.id !== media.id));
+      if (expandedImage === media.image_url) setExpandedImage(null);
+      setMsg("مستند از پرونده بیمار حذف شد.");
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
+    } finally {
+      setDeletingMediaId(null);
     }
   }
 
@@ -194,6 +219,14 @@ export default function UploaderClient() {
                       className="block w-full"
                     >
                       <img src={m.image_url} alt="پزشکی" className="w-full h-24 object-cover rounded-lg border border-gray-100" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteMedia(m)}
+                      disabled={deletingMediaId === m.id}
+                      className="w-full rounded-lg bg-red-50 px-2 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {deletingMediaId === m.id ? "در حال حذف..." : "حذف مستند"}
                     </button>
                   </div>
                 ))}

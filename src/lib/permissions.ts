@@ -28,6 +28,7 @@ const ACTION_ROLES: Record<string, string[]> = {
   "surgeries:write": ["admission", "surgery_tech", "scheduler"],
   "photos:write": ["photographer", "uploader"],
   "photos:read": ["photographer", "uploader", "nurse"],
+  "photos:delete": ["photographer", "uploader", "nurse"],
   "followups:write": ["nurse"],
   "users:manage": ["doctor"],
 };
