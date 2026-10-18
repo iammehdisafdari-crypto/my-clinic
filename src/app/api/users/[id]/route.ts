@@ -27,6 +27,10 @@ export async function PUT(
       return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 404 });
     }
 
+    if (String(targetUser.id) === String(currentUser.id)) {
+      return NextResponse.json({ error: "امکان ویرایش حساب کاربری خودتان را ندارید" }, { status: 403 });
+    }
+
     // پزشک حق ویرایش اکانت خود را تحت هیچ شرایطی ندارد
     if (
       currentUser?.role === "doctor" &&
@@ -105,6 +109,10 @@ export async function DELETE(
 
     if (!targetUser) {
       return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 404 });
+    }
+
+    if (String(targetUser.id) === String(currentUser.id)) {
+      return NextResponse.json({ error: "امکان حذف حساب کاربری خودتان را ندارید" }, { status: 403 });
     }
 
     // پزشک حق حذف اکانت خود را تحت هیچ شرایطی ندارد
