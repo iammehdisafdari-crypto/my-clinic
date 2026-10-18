@@ -72,21 +72,32 @@ export async function POST(request: Request) {
 
   try {
     const db = getDB();
+    // The production database still has the legacy required national_id column.
+    // Detect it so this endpoint works with both the legacy live schema and the
+    // newer schema used by fresh/local databases.
+    const patientColumns = await db.prepare("PRAGMA table_info(patients)").all<{ name: string }>();
+    const hasLegacyNationalId = (patientColumns.results ?? []).some((column) => column.name === "national_id");
+    const legacyNationalId = hasLegacyNationalId ? `LEGACY-${crypto.randomUUID()}` : null;
     // شماره پرونده روز: بزرگ‌ترین شماره‌ی امروز + ۱ (هر روز از ۱ شروع می‌شود)
+    const columns = [
+      "daily_number", "admission_date", "first_name", "last_name", "phone", "landline",
+      "father_name", "age", "job", "marital_status", "residence_area", "surgery_type",
+      "referral_source", "notes", "created_by",
+    ];
+    const values: unknown[] = [
+      date, date, first_name, last_name, phone, landline, opt(b.father_name), age,
+      opt(b.job), opt(b.marital_status), opt(b.residence_area), opt(b.surgery_type),
+      opt(b.referral_source), opt(b.notes), user.uid,
+    ];
+    if (hasLegacyNationalId) {
+      columns.push("national_id");
+      values.push(legacyNationalId);
+    }
+    const placeholders = values.map((_, index) => `?${index + 1}`);
+    placeholders[0] = `(SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1)`;
     const res = await db
-      .prepare(
-        `INSERT INTO patients
-         (daily_number, admission_date, first_name, last_name, phone, landline, father_name, age,
-          job, marital_status, residence_area, surgery_type, referral_source, notes, created_by)
-         VALUES
-         ((SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1),
-          ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)`
-      )
-      .bind(
-        date, first_name, last_name, phone, landline, opt(b.father_name), age,
-        opt(b.job), opt(b.marital_status), opt(b.residence_area), opt(b.surgery_type),
-        opt(b.referral_source), opt(b.notes), user.uid
-      )
+      .prepare(`INSERT INTO patients (${columns.join(", ")}) VALUES (${placeholders.join(", ")})`)
+      .bind(...values)
       .run();
 
     const row = await db
@@ -94,7 +105,8 @@ export async function POST(request: Request) {
       .bind(res.meta.last_row_id)
       .first();
     return Response.json({ ok: true, patient: row });
-  } catch {
+  } catch (err) {
+    console.error("PATIENT_CREATE_ERROR:", err);
     return Response.json({ error: "ثبت بیمار انجام نشد. دوباره تلاش کنید" }, { status: 500 });
   }
 }
