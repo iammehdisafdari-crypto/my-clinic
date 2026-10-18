@@ -19,6 +19,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
 // accounts continue to work with the same access they had before.
 const ACTION_ROLES: Record<string, string[]> = {
   "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader"],
+  "patients:create": ["admission", "scheduler", "visitor", "nurse"],
   "patients:write": ["admission", "scheduler", "visitor"],
   "appointments:write": ["admission", "scheduler", "visitor", "nurse"],
   "visits:refer": ["admission", "scheduler"],

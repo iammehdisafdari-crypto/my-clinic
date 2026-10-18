@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
 // ثبت بیمار جدید
 export async function POST(request: Request) {
-  const { user, error } = await guard("patients:write");
+  const { user, error } = await guard("patients:create");
   if (error) return error;
 
   const b = (await request.json()) as Record<string, unknown>;

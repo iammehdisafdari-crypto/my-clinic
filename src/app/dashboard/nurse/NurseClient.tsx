@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Upload, Stethoscope } from "lucide-react";
+import { Upload, Stethoscope, UserPlus } from "lucide-react";
 import { toJalaliDate, getTodayGregorian } from "@/lib/jalali";
 import JalaliDatePicker from "@/app/dashboard/JalaliDatePicker";
 
@@ -45,6 +45,10 @@ export default function NurseClient() {
   const [search, setSearch] = useState("");
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [showCreatePatient, setShowCreatePatient] = useState(false);
+  const [newPatient, setNewPatient] = useState({ first_name: "", last_name: "", phone: "" });
+  const [duplicatePatients, setDuplicatePatients] = useState<Patient[]>([]);
+  const [patientMsg, setPatientMsg] = useState("");
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [vitalsList, setVitalsList] = useState<VitalItem[]>([]);
@@ -61,6 +65,77 @@ export default function NurseClient() {
 
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function toEnglishDigits(value: string) {
+    return value
+      .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+      .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  }
+
+  async function handleCreatePatient(force = false) {
+    setPatientMsg("");
+    setDuplicatePatients([]);
+
+    const phone = toEnglishDigits(newPatient.phone).replace(/\D/g, "");
+    if (!newPatient.first_name.trim() || !newPatient.last_name.trim()) {
+      setPatientMsg("نام و نام خانوادگی را وارد کنید.");
+      return;
+    }
+    if (!/^09\d{9}$/.test(phone)) {
+      setPatientMsg("شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (!force) {
+        const searchRes = await fetch(`/api/patients?q=${encodeURIComponent(phone)}`);
+        if (searchRes.ok) {
+          const matches = ((await searchRes.json()) as Patient[]).filter(
+            (patient) => toEnglishDigits(patient.phone).replace(/\D/g, "") === phone,
+          );
+          if (matches.length) {
+            setDuplicatePatients(matches);
+            setPatientMsg("این شماره تماس در پرونده‌ای ثبت شده؛ همان بیمار را انتخاب کنید یا اگر بیمار دیگری است ثبت را ادامه دهید.");
+            return;
+          }
+        }
+      }
+
+      const response = await fetch("/api/patients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newPatient, phone }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        patient?: { id: number; daily_number: number };
+      };
+      if (!response.ok || !data.patient) {
+        setPatientMsg(data.error || "ثبت بیمار انجام نشد. دوباره تلاش کنید.");
+        return;
+      }
+
+      const patient: Patient = {
+        id: data.patient.id,
+        daily_number: data.patient.daily_number,
+        first_name: newPatient.first_name.trim(),
+        last_name: newPatient.last_name.trim(),
+        phone,
+      };
+      setSelectedPatient(patient);
+      setSearch(`${patient.first_name} ${patient.last_name}`);
+      setNewPatient({ first_name: "", last_name: "", phone: "" });
+      setDuplicatePatients([]);
+      setShowCreatePatient(false);
+      setPatientMsg(`پرونده بیمار ثبت شد (شماره ${patient.daily_number}). فرم نوبت‌دهی برای او آماده است.`);
+      setMsg("");
+    } catch {
+      setPatientMsg("ارتباط با سرور برقرار نشد. وضعیت اینترنت را بررسی و دوباره تلاش کنید.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const fetchPatients = async () => {
@@ -189,6 +264,85 @@ export default function NurseClient() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <button
+          type="button"
+          onClick={() => {
+            setShowCreatePatient((current) => !current);
+            setPatientMsg("");
+            setDuplicatePatients([]);
+          }}
+          className="w-full border border-emerald-200 text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-xl p-3 text-sm font-bold flex items-center justify-center gap-2"
+        >
+          <UserPlus size={17} />
+          {showCreatePatient ? "بستن ثبت بیمار جدید" : "ثبت بیمار جدید و نوبت‌دهی"}
+        </button>
+        {showCreatePatient && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleCreatePatient();
+            }}
+            className="space-y-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4"
+          >
+            <p className="text-sm font-bold text-gray-800">اطلاعات اولیه بیمار</p>
+            <input
+              className={inputClass}
+              placeholder="نام *"
+              value={newPatient.first_name}
+              onChange={(e) => setNewPatient({ ...newPatient, first_name: e.target.value })}
+              required
+            />
+            <input
+              className={inputClass}
+              placeholder="نام خانوادگی *"
+              value={newPatient.last_name}
+              onChange={(e) => setNewPatient({ ...newPatient, last_name: e.target.value })}
+              required
+            />
+            <input
+              className={inputClass}
+              type="tel"
+              inputMode="tel"
+              placeholder="شماره موبایل *"
+              value={newPatient.phone}
+              onChange={(e) => setNewPatient({ ...newPatient, phone: e.target.value })}
+              required
+            />
+            <button type="submit" disabled={loading} className="w-full rounded-xl bg-brand-green p-3 text-sm font-bold text-white disabled:opacity-50">
+              {loading ? "در حال ثبت..." : "ثبت بیمار و ادامه به نوبت‌دهی"}
+            </button>
+            {duplicatePatients.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                {duplicatePatients.map((patient) => (
+                  <button
+                    key={patient.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPatient(patient);
+                      setSearch(`${patient.first_name} ${patient.last_name}`);
+                      setNewPatient({ first_name: "", last_name: "", phone: "" });
+                      setShowCreatePatient(false);
+                      setDuplicatePatients([]);
+                      setPatientMsg("بیمار موجود انتخاب شد؛ حالا نوبت را ثبت کنید.");
+                    }}
+                    className="w-full rounded-lg bg-white p-2 text-right text-sm font-bold hover:bg-amber-100"
+                  >
+                    انتخاب {patient.first_name} {patient.last_name} — پرونده {patient.daily_number}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => void handleCreatePatient(true)}
+                  className="w-full text-xs font-bold text-amber-900 underline disabled:opacity-50"
+                >
+                  بیمار دیگری است؛ با همین شماره ثبت شود
+                </button>
+              </div>
+            )}
+            {patientMsg && <p role="status" className="text-xs font-bold text-gray-700">{patientMsg}</p>}
+          </form>
+        )}
         <div className="max-h-[500px] overflow-y-auto space-y-2">
           {patients.map((p) => (
             <div
@@ -240,6 +394,10 @@ export default function NurseClient() {
           <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-xl">
             برای ثبت نوبت، ابتدا بیمار را در بخش «انتخاب بیمار» جستجو و انتخاب کنید.
           </p>
+        )}
+
+        {patientMsg && !showCreatePatient && (
+          <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-900">{patientMsg}</p>
         )}
 
         <form onSubmit={handleBookNurseService} className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
