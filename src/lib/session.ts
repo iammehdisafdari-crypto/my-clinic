@@ -53,7 +53,7 @@ export async function getSession(): Promise<SessionUser | null> {
       const db = getDB();
       if (db) {
         const row = (await db
-          .prepare("SELECT role, COALESCE(full_name, display_name, username) as name, username, active FROM users WHERE id = ?1")
+          .prepare("SELECT role, COALESCE(NULLIF(full_name, ''), username) as name, username, active FROM users WHERE id = ?1")
           .bind(uid)
           .first()) as { role: string; name: string; username: string; active: number } | null;
         if (row && row.active !== 0) {

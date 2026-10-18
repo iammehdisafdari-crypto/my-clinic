@@ -87,14 +87,14 @@ export async function PUT(
     if (passwordHash) {
       await db
         .prepare(
-          "UPDATE users SET username = ?1, display_name = ?2, role = ?3, password_hash = ?4 WHERE id = ?5"
+          "UPDATE users SET username = ?1, full_name = ?2, role = ?3, password_hash = ?4 WHERE id = ?5"
         )
         .bind(finalUsername, display_name, role, passwordHash, id)
         .run();
     } else {
       await db
         .prepare(
-          "UPDATE users SET username = ?1, display_name = ?2, role = ?3 WHERE id = ?4"
+          "UPDATE users SET username = ?1, full_name = ?2, role = ?3 WHERE id = ?4"
         )
         .bind(finalUsername, display_name, role, id)
         .run();
