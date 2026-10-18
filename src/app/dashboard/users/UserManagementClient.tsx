@@ -2,28 +2,7 @@
 
 import { useState } from "react";
 import { Trash2, Edit2, Check, X, KeyRound } from "lucide-react";
-
-export const ROLE_HIERARCHY: Record<string, number> = {
-  manager: 1,      // ادمین
-  doctor: 2,       // پزشک
-  scheduler: 3,    // منشی / پذیرش
-  nurse: 4,        // پرستار
-  photographer: 5, // عکاس
-  marketer: 6,     // بازاریاب
-  uploader: 7,     // آپلودر
-  visitor: 8,      // ویزیتور
-};
-
-export const ROLE_LABELS: Record<string, string> = {
-  manager: "مدیر / ادمین",
-  doctor: "پزشک",
-  scheduler: "منشی / پذیرش",
-  nurse: "پرستار",
-  photographer: "عکاس",
-  marketer: "بازاریاب",
-  uploader: "آپلودر",
-  visitor: "ویزیتور",
-};
+import { canManageRole, ROLE_HIERARCHY, ROLE_LABELS } from "@/lib/roles";
 
 type UserItem = {
   id: number;
@@ -40,14 +19,13 @@ export default function UserManagementClient({
   initialUsers: UserItem[];
   currentUserRole: string;
 }) {
-  const currentRank = ROLE_HIERARCHY[currentUserRole] ?? 99;
+  const assignableRoles = Object.entries(ROLE_LABELS).filter(([role]) =>
+    canManageRole(currentUserRole, role)
+  );
 
   // فیلتر: کاربر فقط اعضای با سطح پایین‌تر از خود را مدیریت می‌کند
   const [users, setUsers] = useState<UserItem[]>(() => {
-    return initialUsers.filter((u) => {
-      const targetRank = ROLE_HIERARCHY[u.role] ?? 99;
-      return targetRank > currentRank;
-    });
+    return initialUsers.filter((u) => canManageRole(currentUserRole, u.role));
   });
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -59,10 +37,27 @@ export default function UserManagementClient({
   });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [newUser, setNewUser] = useState({ username: "", display_name: "", password: "", role: assignableRoles[0]?.[0] || "" });
 
-  const assignableRoles = Object.entries(ROLE_LABELS).filter(
-    ([roleKey]) => (ROLE_HIERARCHY[roleKey] ?? 99) > currentRank
-  );
+  async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoading(true);
+    setMsg("");
+    const res = await fetch("/api/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: newUser.username.trim(), full_name: newUser.display_name.trim(), password: newUser.password, role: newUser.role }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setLoading(false);
+    if (!res.ok) {
+      setMsg(data.error || "خطا در ساخت کاربر");
+      return;
+    }
+    setUsers((current) => [...current, data.user]);
+    setNewUser({ username: "", display_name: "", password: "", role: assignableRoles[0]?.[0] || "" });
+    setMsg("کاربر با موفقیت ساخته شد.");
+  }
 
   function startEdit(u: UserItem) {
     setEditingId(u.id);
@@ -141,6 +136,18 @@ export default function UserManagementClient({
         <p className="text-xs font-bold text-center bg-gray-50 text-gray-700 p-3 rounded-xl border border-gray-100">
           {msg}
         </p>
+      )}
+
+      {assignableRoles.length > 0 && (
+        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-5 gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+          <input required value={newUser.display_name} onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })} placeholder="نام و نام خانوادگی" className="rounded-xl border border-gray-200 bg-white p-3 text-sm" />
+          <input required dir="ltr" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} placeholder="نام کاربری" className="rounded-xl border border-gray-200 bg-white p-3 text-sm" />
+          <input required minLength={8} type="password" dir="ltr" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="رمز عبور (حداقل ۸ حرف)" className="rounded-xl border border-gray-200 bg-white p-3 text-sm" />
+          <select required value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="rounded-xl border border-gray-200 bg-white p-3 text-sm">
+            {assignableRoles.map(([role, label]) => <option key={role} value={role}>{label}</option>)}
+          </select>
+          <button disabled={loading} className="rounded-xl bg-brand-green p-3 text-sm font-bold text-white disabled:opacity-50">افزودن کاربر</button>
+        </form>
       )}
 
       <div className="overflow-x-auto">
@@ -285,3 +292,4 @@ export default function UserManagementClient({
     </div>
   );
 }
+

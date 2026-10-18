@@ -2,25 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDB } from "@/lib/db";
 import { requireRole } from "@/lib/permissions";
 import { hashPassword } from "@/lib/crypto";
+import { canManageRole } from "@/lib/roles";
 
 export const runtime = "edge";
-
-const ROLE_HIERARCHY: Record<string, number> = {
-  manager: 1,      // ادمین
-  doctor: 2,       // پزشک
-  scheduler: 3,    // منشی
-  nurse: 4,        // پرستار
-  photographer: 5, // عکاس
-  marketer: 6,     // بازاریاب
-  uploader: 7,     // آپلودر
-  visitor: 8,      // ویزیتور
-};
-
-function canManageRole(currentUserRole: string, targetUserRole: string): boolean {
-  const currentRank = ROLE_HIERARCHY[currentUserRole] ?? 99;
-  const targetRank = ROLE_HIERARCHY[targetUserRole] ?? 99;
-  return currentRank < targetRank;
-}
 
 export async function PUT(
   req: NextRequest,
@@ -55,9 +39,7 @@ export async function PUT(
       return NextResponse.json({ error: "شما اجازه ویرایش این کاربر را ندارید" }, { status: 403 });
     }
 
-    const currentRank = ROLE_HIERARCHY[currentUser.role] ?? 99;
-    const newRoleRank = ROLE_HIERARCHY[role] ?? 99;
-    if (newRoleRank <= currentRank) {
+    if (!canManageRole(currentUser.role, role)) {
       return NextResponse.json({ error: "نمی‌توانید نقشی هم‌سطح یا بالاتر از خودتان اعطا کنید" }, { status: 403 });
     }
 
