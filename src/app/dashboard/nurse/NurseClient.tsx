@@ -51,6 +51,7 @@ export default function NurseClient() {
   const [patientMsg, setPatientMsg] = useState("");
 
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [vitalsList, setVitalsList] = useState<VitalItem[]>([]);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
@@ -547,13 +548,18 @@ export default function NurseClient() {
                         ? "بعد از عمل"
                         : "وضعیت فعلی"}
                     </span>
-                    <a href={m.image_url} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedImage(m.image_url)}
+                      aria-label="نمایش بزرگ تصویر پرونده"
+                      className="block w-full"
+                    >
                       <img
                         src={m.image_url}
                         alt="مدیا پرونده"
                         className="w-full h-20 object-cover rounded-lg"
                       />
-                    </a>
+                    </button>
                     <span className="text-[10px] text-gray-400 block text-center font-mono">
                       {toJalaliDate(m.created_at)}
                     </span>
@@ -571,6 +577,27 @@ export default function NurseClient() {
           <p className="text-sm text-gray-400 text-center py-20">لطفاً ابتدا یک بیمار را انتخاب کنید.</p>
         )}
       </div>
+      {expandedImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="نمایش تصویر بیمار"
+          onClick={() => setExpandedImage(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="relative max-h-full max-w-full" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setExpandedImage(null)}
+              aria-label="بستن تصویر"
+              className="absolute -top-3 -right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-2xl font-bold text-gray-900 shadow"
+            >
+              ×
+            </button>
+            <img src={expandedImage} alt="تصویر بزرگ بیمار" className="max-h-[90vh] max-w-[92vw] rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

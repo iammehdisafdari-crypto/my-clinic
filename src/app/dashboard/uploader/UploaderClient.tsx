@@ -23,6 +23,7 @@ export default function UploaderClient() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   
   const [file, setFile] = useState<File | null>(null);
   const [imageType, setImageType] = useState<"before" | "after">("before");
@@ -186,9 +187,14 @@ export default function UploaderClient() {
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-block ${m.image_type === 'before' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
                       {m.image_type === 'before' ? 'قبل از عمل' : 'بعد از عمل'}
                     </span>
-                    <a href={m.image_url} target="_blank" rel="noreferrer">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedImage(m.image_url)}
+                      aria-label="نمایش بزرگ تصویر پزشکی"
+                      className="block w-full"
+                    >
                       <img src={m.image_url} alt="پزشکی" className="w-full h-24 object-cover rounded-lg border border-gray-100" />
-                    </a>
+                    </button>
                   </div>
                 ))}
                 {mediaList.length === 0 && (
@@ -201,6 +207,27 @@ export default function UploaderClient() {
           <p className="text-sm text-gray-400 text-center py-20">لطفاً ابتدا یک بیمار را از لیست سمت چپ انتخاب کنید.</p>
         )}
       </div>
+      {expandedImage && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="نمایش تصویر بیمار"
+          onClick={() => setExpandedImage(null)}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+        >
+          <div className="relative max-h-full max-w-full" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setExpandedImage(null)}
+              aria-label="بستن تصویر"
+              className="absolute -top-3 -right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white text-2xl font-bold text-gray-900 shadow"
+            >
+              ×
+            </button>
+            <img src={expandedImage} alt="تصویر بزرگ بیمار" className="max-h-[90vh] max-w-[92vw] rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
