@@ -4,7 +4,7 @@ import UploaderClient from "./UploaderClient";
 export const runtime = "edge";
 
 export default async function UploaderPage() {
-  await requireRole(["uploader", "manager", "doctor"]);
+  await requireRole(["uploader", "photographer", "manager", "doctor"]);
   return (
     <div className="space-y-6">
       <div>

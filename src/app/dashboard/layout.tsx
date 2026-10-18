@@ -13,6 +13,7 @@ const ROLE_LABELS: Record<string, string> = {
   scheduler: "منشی",
   visitor: "بازاریاب",
   uploader: "عکاس",
+  photographer: "عکاس",
   nurse: "پرستار",
 };
 

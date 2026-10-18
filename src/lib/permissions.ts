@@ -10,7 +10,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
   doctor: "/dashboard/visits",
   surgery_tech: "/dashboard/surgery",
   nurse: "/dashboard/nurse",
-  photographer: "/dashboard/photo",
+  photographer: "/dashboard/uploader",
   admission: "/dashboard/patients",
   accounting: "/dashboard/accounting",
 };
@@ -18,7 +18,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
 // API permissions. Keep legacy role names during the role migration so existing
 // accounts continue to work with the same access they had before.
 const ACTION_ROLES: Record<string, string[]> = {
-  "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader"],
+  "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader", "photographer"],
   "patients:create": ["admission", "scheduler", "visitor", "nurse"],
   "patients:write": ["admission", "scheduler", "visitor"],
   "appointments:write": ["admission", "scheduler", "visitor", "nurse"],
@@ -50,7 +50,7 @@ export function can(role: string, targetPath: string): boolean {
   if (targetPath.startsWith("/dashboard/nurse")) {
     return ["admin", "manager", "nurse", "doctor"].includes(role);
   }
-  if (targetPath.startsWith("/dashboard/photo")) {
+  if (targetPath.startsWith("/dashboard/photo") || targetPath.startsWith("/dashboard/uploader")) {
     return ["admin", "manager", "photographer"].includes(role);
   }
   if (targetPath.startsWith("/dashboard/patients")) {
