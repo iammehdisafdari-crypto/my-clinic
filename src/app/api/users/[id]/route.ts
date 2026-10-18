@@ -34,10 +34,10 @@ export async function PUT(
 
     const db = getDB();
 
-    const targetUser = await db
+    const targetUser = (await db
       .prepare("SELECT id, username, role FROM users WHERE id = ?1")
       .bind(id)
-      .first<{ id: number; username: string; role: string }>();
+      .first()) as { id: number; username: string; role: string } | null;
 
     if (!targetUser) {
       return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 404 });
@@ -116,10 +116,10 @@ export async function DELETE(
 
     const db = getDB();
 
-    const targetUser = await db
+    const targetUser = (await db
       .prepare("SELECT id, username, role FROM users WHERE id = ?1")
       .bind(id)
-      .first<{ id: number; username: string; role: string }>();
+      .first()) as { id: number; username: string; role: string } | null;
 
     if (!targetUser) {
       return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 404 });
@@ -144,3 +144,4 @@ export async function DELETE(
     return NextResponse.json({ error: error.message || "خطا در حذف" }, { status: 500 });
   }
 }
+

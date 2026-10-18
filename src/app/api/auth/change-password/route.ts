@@ -24,10 +24,10 @@ export async function POST(req: NextRequest) {
     }
 
     const db = getDB();
-    const user = await db
+    const user = (await db
       .prepare("SELECT id, password_hash FROM users WHERE id = ?1")
       .bind(session.uid)
-      .first<{ id: number; password_hash: string }>();
+      .first()) as { id: number; password_hash: string } | null;
 
     if (!user) {
       return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 404 });
@@ -51,3 +51,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message || "خطا در تغییر رمز عبور" }, { status: 500 });
   }
 }
+

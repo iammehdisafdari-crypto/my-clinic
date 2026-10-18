@@ -1,11 +1,10 @@
-import { getRequestContext } from "@cloudflare/next-on-pages";
+import { getDB } from "@/lib/db";
 export const runtime = "edge";
 
 export async function POST(request: Request) {
   try {
     const { email, password, username } = await request.json();
-    const { env } = getRequestContext();
-    const db = env.DB;
+    const db = getDB();
 
     // ۱. بررسی اینکه آیا این ایمیل قبلاً ثبت شده یا نه
     const existingUser = await db.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
@@ -27,3 +26,4 @@ export async function POST(request: Request) {
     return new Response(JSON.stringify({ success: false, error: "خطا در ثبت‌نام: " + error.message }), { status: 500 });
   }
 }
+

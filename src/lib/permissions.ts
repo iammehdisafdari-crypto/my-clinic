@@ -1,5 +1,6 @@
-﻿import { redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getSession } from "./session";
+import type { SessionUser } from "./session";
 
 export type Role = "admin" | "manager" | "doctor" | "surgery_tech" | "nurse" | "photographer" | "admission" | "accounting";
 
@@ -14,8 +15,27 @@ export const HOME_BY_ROLE: Record<string, string> = {
   accounting: "/dashboard/accounting",
 };
 
+// API permissions. Keep legacy role names during the role migration so existing
+// accounts continue to work with the same access they had before.
+const ACTION_ROLES: Record<string, string[]> = {
+  "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader"],
+  "patients:write": ["admission", "scheduler", "visitor"],
+  "appointments:write": ["admission", "scheduler", "visitor"],
+  "visits:refer": ["admission", "scheduler"],
+  "visits:read": ["admission", "nurse", "scheduler"],
+  "visits:doctor": ["doctor"],
+  "surgeries:write": ["admission", "surgery_tech", "scheduler"],
+  "photos:write": ["photographer", "uploader"],
+  "photos:read": ["photographer", "uploader", "nurse"],
+  "followups:write": ["nurse"],
+  "users:manage": ["doctor"],
+};
+
 export function can(role: string, targetPath: string): boolean {
-  if (role === "admin" || role === "manager") return true;
+  if (["admin", "manager", "doctor"].includes(role)) return true;
+
+  const actionRoles = ACTION_ROLES[targetPath];
+  if (actionRoles) return actionRoles.includes(role);
 
   if (targetPath.startsWith("/dashboard/manager") || targetPath.startsWith("/dashboard/users")) {
     return role === "admin" || role === "manager";
@@ -41,6 +61,19 @@ export function can(role: string, targetPath: string): boolean {
   return true;
 }
 
+export async function guard(
+  action: string
+): Promise<{ user: SessionUser; error?: undefined } | { user?: undefined; error: Response }> {
+  const user = await getSession();
+  if (!user) {
+    return { error: Response.json({ error: "ابتدا وارد شوید" }, { status: 401 }) };
+  }
+  if (!can(user.role, action)) {
+    return { error: Response.json({ error: "دسترسی ندارید" }, { status: 403 }) };
+  }
+  return { user };
+}
+
 export async function requireRole(allowedRoles: string[]) {
   const session = await getSession();
   if (!session) {
@@ -55,3 +88,4 @@ export async function requireRole(allowedRoles: string[]) {
   }
   return session;
 }
+

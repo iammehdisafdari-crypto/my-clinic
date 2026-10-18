@@ -1,9 +1,9 @@
-﻿import { SignJWT, jwtVerify } from "jose";
+import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { getDB, getEnv } from "./db";
 
 export const COOKIE = "auth_token";
-export type SessionUser = { uid: number; role: string; name: string };
+export type SessionUser = { uid: number; id: number; role: string; name: string; username?: string };
 const FALLBACK_SECRET = "clinic_super_secret_jwt_key_2026_production_secure_random_9981";
 
 function secretKey(): Uint8Array {
@@ -17,7 +17,7 @@ function secretKey(): Uint8Array {
 
 export async function createSession(user: { id: number; role: string; full_name?: string; display_name?: string; username?: string }) {
   const rawName = user.full_name || user.display_name || user.username || "مدیر";
-  const token = await new SignJWT({ uid: user.id, role: user.role, name: rawName })
+  const token = await new SignJWT({ uid: user.id, role: user.role, name: rawName, username: user.username })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("12h")
@@ -52,16 +52,18 @@ export async function getSession(): Promise<SessionUser | null> {
     try {
       const db = getDB();
       if (db) {
-        const row = await db
-          .prepare("SELECT role, COALESCE(full_name, display_name, username) as name, active FROM users WHERE id = ?1")
+        const row = (await db
+          .prepare("SELECT role, COALESCE(full_name, display_name, username) as name, username, active FROM users WHERE id = ?1")
           .bind(uid)
-          .first<{ role: string; name: string; active: number }>();
+          .first()) as { role: string; name: string; username: string; active: number } | null;
         if (row && row.active !== 0) {
           const fetchedName = String(row.name || "");
           return {
             uid,
+            id: uid,
             role: String(row.role),
             name: fetchedName.includes("") || !fetchedName ? "مدیر سیستم" : fetchedName,
+            username: String(row.username || ""),
           };
         }
       }
@@ -69,8 +71,10 @@ export async function getSession(): Promise<SessionUser | null> {
 
     return {
       uid,
+      id: uid,
       role: String(payload.role || "admin"),
       name: cleanName,
+      username: typeof payload.username === "string" ? payload.username : undefined,
     };
   } catch {
     return null;
@@ -83,3 +87,4 @@ export async function destroySession() {
     cookieStore.delete(COOKIE);
   } catch {}
 }
+
