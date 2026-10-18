@@ -14,7 +14,7 @@ export default async function UsersPage() {
       `SELECT 
          id, 
          username, 
-         COALESCE(NULLIF(display_name, ''), username) AS display_name, 
+         COALESCE(NULLIF(full_name, ''), username) AS display_name, 
          role, 
          1 AS is_active 
        FROM users 
@@ -37,3 +37,4 @@ export default async function UsersPage() {
     />
   );
 }
+
