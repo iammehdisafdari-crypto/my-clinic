@@ -16,8 +16,8 @@ function secretKey(): Uint8Array {
 }
 
 export async function createSession(user: { id: number; role: string; full_name?: string; display_name?: string; username?: string }) {
-  const name = user.full_name || user.display_name || user.username || "مدیر سیستم";
-  const token = await new SignJWT({ uid: user.id, role: user.role, name })
+  const rawName = user.full_name || user.display_name || user.username || "مدیر";
+  const token = await new SignJWT({ uid: user.id, role: user.role, name: rawName })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("12h")
@@ -43,6 +43,12 @@ export async function getSession(): Promise<SessionUser | null> {
     const uid = Number(payload.uid);
     if (!uid) return null;
 
+    let cleanName = typeof payload.name === "string" ? payload.name : "مدیر";
+    // اگر نام در توکن آسیب دیده بود
+    if (cleanName.includes("")) {
+      cleanName = "مدیر سیستم";
+    }
+
     try {
       const db = getDB();
       if (db) {
@@ -51,7 +57,12 @@ export async function getSession(): Promise<SessionUser | null> {
           .bind(uid)
           .first<{ role: string; name: string; active: number }>();
         if (row && row.active !== 0) {
-          return { uid, role: String(row.role), name: String(row.name || payload.name || "") };
+          const fetchedName = String(row.name || "");
+          return {
+            uid,
+            role: String(row.role),
+            name: fetchedName.includes("") || !fetchedName ? "مدیر سیستم" : fetchedName,
+          };
         }
       }
     } catch {}
@@ -59,7 +70,7 @@ export async function getSession(): Promise<SessionUser | null> {
     return {
       uid,
       role: String(payload.role || "admin"),
-      name: String(payload.name || "مدیر سیستم"),
+      name: cleanName,
     };
   } catch {
     return null;
