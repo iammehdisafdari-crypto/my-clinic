@@ -8,6 +8,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
   admin: "/dashboard/manager",
   manager: "/dashboard/manager",
   doctor: "/dashboard/visits",
+  scheduler: "/dashboard/patients",
   surgery_tech: "/dashboard/surgery",
   nurse: "/dashboard/nurse",
   photographer: "/dashboard/uploader",
