@@ -8,9 +8,11 @@ export async function GET() {
   if (error) return error;
 
   try {
-    const { results } = await getDB()
-      .prepare(
-        `SELECT r.id, r.appointment_id, r.patient_id, r.notified_channel, r.referred_at, r.status,
+    const db = getDB();
+    const [surgeryReferrals, visitReferrals] = await Promise.all([
+      db
+        .prepare(
+          `SELECT r.id, r.appointment_id, r.patient_id, r.notified_channel, r.referred_at, r.status,
                 a.appointment_date, a.appointment_time, a.hospital_name,
                 p.daily_number, p.first_name, p.last_name, p.phone, p.surgery_type,
                 (SELECT COUNT(*) FROM patient_media m
@@ -20,8 +22,12 @@ export async function GET() {
          JOIN appointments a ON a.id = r.appointment_id
          JOIN patients p ON p.id = r.patient_id
          WHERE r.status = 'pending'
-         UNION ALL
-         SELECT r.id, NULL AS appointment_id, r.patient_id, NULL AS notified_channel, r.referred_at, r.status,
+         ORDER BY r.referred_at ASC, r.id ASC`
+        )
+        .all(),
+      db
+        .prepare(
+          `SELECT r.id, NULL AS appointment_id, r.patient_id, NULL AS notified_channel, r.referred_at, r.status,
                 v.visit_date AS appointment_date, NULL AS appointment_time, NULL AS hospital_name,
                 p.daily_number, p.first_name, p.last_name, p.phone, p.surgery_type,
                 (SELECT COUNT(*) FROM patient_media m
@@ -31,9 +37,17 @@ export async function GET() {
          JOIN visits v ON v.id = r.visit_id
          JOIN patients p ON p.id = r.patient_id
          WHERE r.status = 'pending'
-         ORDER BY referred_at ASC, id ASC`
-      )
-      .all();
+         ORDER BY r.referred_at ASC, r.id ASC`
+        )
+        .all(),
+    ]);
+
+    const results = [...surgeryReferrals.results, ...visitReferrals.results].sort((a, b) => {
+      const byDate = String(a.referred_at ?? "").localeCompare(String(b.referred_at ?? ""));
+      if (byDate) return byDate;
+      const byKind = String(a.referral_kind).localeCompare(String(b.referral_kind));
+      return byKind || Number(a.id) - Number(b.id);
+    });
     return Response.json(results);
   } catch (error) {
     console.error("PHOTOGRAPHY_REFERRALS_LIST_FAILED", error);
