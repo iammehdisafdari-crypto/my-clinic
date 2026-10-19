@@ -12,6 +12,8 @@ CREATE TABLE appointments (
   description TEXT,
   created_by INTEGER REFERENCES users(id),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  hospital_name TEXT,
+  hospital_address TEXT,
   UNIQUE(appointment_date, appointment_time, type)              -- جلوگیری از تداخل زمان برای یک نوع نوبت
 );
 

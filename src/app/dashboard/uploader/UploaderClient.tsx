@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect } from "react";
-import { Upload } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Camera, CheckCircle2, LoaderCircle, Upload } from "lucide-react";
 
 type Patient = {
   id: number;
@@ -14,8 +14,26 @@ type Patient = {
 type MediaItem = {
   id: number;
   image_url: string;
-  image_type: "before" | "after";
+  image_type: "before" | "after" | "current";
   created_at: string;
+  photography_referral_id?: number | null;
+};
+
+type PhotographyReferral = {
+  id: number;
+  appointment_id: number;
+  patient_id: number;
+  notified_channel: "whatsapp" | "telegram";
+  referred_at: string;
+  appointment_date: string;
+  appointment_time: string;
+  hospital_name: string;
+  daily_number: number;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  surgery_type: string | null;
+  photo_count: number;
 };
 
 export default function UploaderClient() {
@@ -25,11 +43,32 @@ export default function UploaderClient() {
   const [mediaList, setMediaList] = useState<MediaItem[]>([]);
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
+  const [referrals, setReferrals] = useState<PhotographyReferral[]>([]);
+  const [activeReferralId, setActiveReferralId] = useState<number | null>(null);
+  const [completingReferralId, setCompletingReferralId] = useState<number | null>(null);
+  const [referralError, setReferralError] = useState("");
   
   const [file, setFile] = useState<File | null>(null);
   const [imageType, setImageType] = useState<"before" | "after">("before");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const fetchReferrals = useCallback(async () => {
+    try {
+      const response = await fetch("/api/photography-referrals");
+      if (!response.ok) throw new Error("دریافت ارجاع‌های عکاسی انجام نشد.");
+      setReferrals(await response.json());
+      setReferralError("");
+    } catch (error) {
+      setReferralError(error instanceof Error ? error.message : "ارتباط با سرور برقرار نشد.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchReferrals();
+    const interval = setInterval(fetchReferrals, 15000);
+    return () => clearInterval(interval);
+  }, [fetchReferrals]);
 
   useEffect(() => {
     const fetchPatients = async () => {
@@ -50,7 +89,7 @@ export default function UploaderClient() {
       if (res.ok) setMediaList(await res.json());
     };
     fetchMedia();
-  }, [selectedPatient]);
+  }, [selectedPatient, activeReferralId]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -66,21 +105,50 @@ export default function UploaderClient() {
     formData.append("file", file);
     formData.append("image_type", imageType);
 
-    const res = await fetch(`/api/patients/${selectedPatient.id}/media`, {
-      method: "POST",
-      body: formData,
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (res.ok) {
+    if (activeReferralId !== null) formData.append("photography_referral_id", String(activeReferralId));
+    try {
+      const res = await fetch(`/api/patients/${selectedPatient.id}/media`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        setMsg(data.error || "خطا در ثبت تصویر");
+        return;
+      }
       setMsg("تصویر با موفقیت به پرونده بیمار اضافه شد.");
       setFile(null);
       const mRes = await fetch(`/api/patients/${selectedPatient.id}/media`);
       if (mRes.ok) setMediaList(await mRes.json());
-    } else {
-      setMsg(data.error || "خطا در ثبت تصویر");
+      if (activeReferralId !== null) await fetchReferrals();
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function completeReferral(referralId: number) {
+    setCompletingReferralId(referralId);
+    setMsg("");
+    try {
+      const response = await fetch(`/api/photography-referrals/${referralId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ complete: true }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) {
+        setMsg(data.error || "تکمیل ارجاع عکاسی ثبت نشد.");
+        return;
+      }
+      setMsg("عکاسی تکمیل و به منشی اطلاع داده شد.");
+      setActiveReferralId(null);
+      await fetchReferrals();
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
+    } finally {
+      setCompletingReferralId(null);
     }
   }
 
@@ -115,6 +183,40 @@ export default function UploaderClient() {
       {/* جستجو و انتخاب بیمار */}
       <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
         <h2 className="text-lg font-black">انتخاب بیمار جهت عکاسی</h2>
+        <div className="space-y-3 rounded-2xl border border-violet-100 bg-violet-50/60 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-black text-violet-950"><Camera size={17} /> ارجاع‌های در انتظار عکاسی</p>
+            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-violet-800">{referrals.length.toLocaleString("fa-IR")}</span>
+          </div>
+          {referralError && <p role="alert" className="text-xs text-red-700">{referralError}</p>}
+          {referrals.length === 0 ? (
+            <p className="text-xs text-gray-500">ارجاع بازی وجود ندارد.</p>
+          ) : referrals.map((referral) => (
+            <button
+              type="button"
+              key={referral.id}
+              onClick={() => {
+                setFile(null);
+                setSelectedPatient({
+                  id: referral.patient_id,
+                  daily_number: referral.daily_number,
+                  first_name: referral.first_name,
+                  last_name: referral.last_name,
+                  phone: referral.phone,
+                  surgery_type: referral.surgery_type,
+                });
+                setActiveReferralId(referral.id);
+                setSearch(`${referral.first_name} ${referral.last_name}`);
+                setMsg("");
+              }}
+              className={`w-full rounded-xl border p-3 text-right transition-colors ${activeReferralId === referral.id ? "border-violet-300 bg-white" : "border-violet-100 bg-white/70 hover:bg-white"}`}
+            >
+              <span className="block text-sm font-bold text-gray-900">{referral.first_name} {referral.last_name} · پرونده {referral.daily_number.toLocaleString("fa-IR")}</span>
+              <span className="mt-1 block text-xs text-gray-600">عمل: {referral.appointment_date}، ساعت {referral.appointment_time} · {referral.hospital_name}</span>
+              <span className="mt-1 block text-xs font-bold text-violet-800">عکس جدید ثبت‌شده: {Number(referral.photo_count).toLocaleString("fa-IR")}</span>
+            </button>
+          ))}
+        </div>
         <input
           className={inputClass}
           placeholder="جستجوی بیمار با نام یا شماره..."
@@ -125,7 +227,7 @@ export default function UploaderClient() {
           {patients.map((p) => (
             <div
               key={p.id}
-              onClick={() => setSelectedPatient(p)}
+              onClick={() => { setFile(null); setActiveReferralId(null); setSelectedPatient(p); }}
               className={`p-3.5 rounded-2xl cursor-pointer text-sm flex justify-between items-center transition-all ${
                 selectedPatient?.id === p.id ? "bg-brand-green text-white font-bold shadow-md" : "bg-gray-50 hover:bg-gray-100"
               }`}
@@ -146,9 +248,29 @@ export default function UploaderClient() {
 
         {selectedPatient ? (
           <div className="space-y-6">
+            {activeReferralId !== null && (() => {
+              const activeReferral = referrals.find((item) => item.id === activeReferralId);
+              if (!activeReferral) return null;
+              return (
+                <div className="space-y-2 rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                  <p className="flex items-center gap-2 text-sm font-black text-violet-950"><Camera size={17} /> این بیمار از طرف منشی ارجاع شده است</p>
+                  <p className="text-xs leading-5 text-violet-900">پس از ثبت عکس‌های لازم در همین پرونده، ارجاع را تکمیل کنید. تا این لحظه {Number(activeReferral.photo_count).toLocaleString("fa-IR")} عکس جدید برای این ارجاع ثبت شده است.</p>
+                  <button
+                    type="button"
+                    disabled={completingReferralId !== null || Number(activeReferral.photo_count) === 0}
+                    onClick={() => void completeReferral(activeReferral.id)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {completingReferralId === activeReferral.id ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                    {completingReferralId === activeReferral.id ? "در حال ثبت..." : "تکمیل ارجاع عکاسی"}
+                  </button>
+                  {Number(activeReferral.photo_count) === 0 && <p className="text-xs text-violet-800">برای بستن ارجاع، ابتدا دست‌کم یک عکس جدید ثبت کنید.</p>}
+                </div>
+              );
+            })()}
             <div className="bg-emerald-50 p-4 rounded-2xl text-sm font-bold text-emerald-900 flex justify-between items-center">
               <span>بیمار: {selectedPatient.first_name} {selectedPatient.last_name}</span>
-              <button onClick={() => setSelectedPatient(null)} className="text-xs text-red-600 underline">تغییر</button>
+              <button onClick={() => { setFile(null); setActiveReferralId(null); setSelectedPatient(null); }} className="text-xs text-red-600 underline">تغییر</button>
             </div>
 
             {/* فرم انتخاب فایل حرفه‌ای با آیکون و ظاهر مدرن */}
@@ -209,8 +331,8 @@ export default function UploaderClient() {
               <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
                 {mediaList.map((m) => (
                   <div key={m.id} className="border border-gray-200 rounded-xl p-2 space-y-2 bg-white">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-block ${m.image_type === 'before' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                      {m.image_type === 'before' ? 'قبل از عمل' : 'بعد از عمل'}
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-block ${m.image_type === 'before' ? 'bg-amber-100 text-amber-700' : m.image_type === 'after' ? 'bg-green-100 text-green-700' : 'bg-sky-100 text-sky-700'}`}>
+                      {m.image_type === 'before' ? 'قبل از عمل' : m.image_type === 'after' ? 'بعد از عمل' : 'وضعیت فعلی'}
                     </span>
                     <button
                       type="button"
