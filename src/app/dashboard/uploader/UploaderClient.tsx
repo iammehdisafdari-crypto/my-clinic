@@ -180,6 +180,8 @@ export default function UploaderClient() {
   }
 
   const inputClass = "border border-gray-200 rounded-xl p-3 w-full text-sm outline-none focus:border-brand-green bg-white";
+  const pendingReferralPatientIds = new Set(referrals.map((referral) => referral.patient_id));
+  const searchablePatients = patients.filter((patient) => !pendingReferralPatientIds.has(patient.id));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -231,7 +233,7 @@ export default function UploaderClient() {
           onChange={(e) => setSearch(e.target.value)}
         />
         <div className="max-h-96 overflow-y-auto space-y-2">
-          {patients.map((p) => (
+          {searchablePatients.map((p) => (
             <div
               key={p.id}
               onClick={() => { setFile(null); setActiveReferral(null); setSelectedPatient(p); }}
@@ -246,6 +248,13 @@ export default function UploaderClient() {
               <span className="text-xs font-mono">پرونده: {p.daily_number}</span>
             </div>
           ))}
+          {search.trim() && searchablePatients.length === 0 && (
+            <p className="rounded-xl bg-violet-50 p-3 text-xs leading-5 text-violet-900">
+              {patients.length > 0
+                ? "این بیمار ارجاعِ باز عکاسی دارد؛ برای ادامه، او را از بخش «ارجاع‌های در انتظار عکاسی» انتخاب کنید."
+                : "بیماری با این مشخصات پیدا نشد."}
+            </p>
+          )}
         </div>
       </div>
 
