@@ -30,16 +30,12 @@ type VitalItem = {
 };
 
 const NURSE_SERVICES = [
-  { id: "taping", label: "نوبت چسب" },
-  { id: "splint", label: "آتل" },
-  { id: "stitches", label: "بخیه" },
-  { id: "tampon", label: "نوبت تامپون" },
-  { id: "examination", label: "معاینه" },
-  { id: "dissatisfaction", label: "نارضایتی بیمار" },
-  { id: "cortisone", label: "نوبت کورتن" },
-  { id: "post_op_consult", label: "مشاوره بعد از عمل" },
-  { id: "minor_surgery", label: "عمل سرپایی در مطب" },
-  { id: "surgery_assist", label: "دستیاری جراحی" },
+  { id: "taping", label: "چسب" },
+  { id: "splint_stitches", label: "آتل و بخیه" },
+  { id: "tampon", label: "تامپون" },
+  { id: "examination_evening", label: "معاینه عصر" },
+  { id: "examination_morning", label: "معاینه صبح" },
+  { id: "dissatisfaction", label: "ناراضی ها" },
 ];
 
 export default function NurseClient() {
