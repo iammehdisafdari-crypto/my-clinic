@@ -21,13 +21,15 @@ type MediaItem = {
 
 type PhotographyReferral = {
   id: number;
-  appointment_id: number;
+  appointment_id: number | null;
+  visit_id: number | null;
+  referral_kind: "surgery" | "visit";
   patient_id: number;
-  notified_channel: "whatsapp" | "telegram";
+  notified_channel: "whatsapp" | "telegram" | null;
   referred_at: string;
-  appointment_date: string;
-  appointment_time: string;
-  hospital_name: string;
+  appointment_date: string | null;
+  appointment_time: string | null;
+  hospital_name: string | null;
   daily_number: number;
   first_name: string;
   last_name: string;
@@ -44,7 +46,7 @@ export default function UploaderClient() {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
   const [referrals, setReferrals] = useState<PhotographyReferral[]>([]);
-  const [activeReferralId, setActiveReferralId] = useState<number | null>(null);
+  const [activeReferral, setActiveReferral] = useState<{ id: number; kind: "surgery" | "visit" } | null>(null);
   const [completingReferralId, setCompletingReferralId] = useState<number | null>(null);
   const [referralError, setReferralError] = useState("");
   
@@ -89,7 +91,7 @@ export default function UploaderClient() {
       if (res.ok) setMediaList(await res.json());
     };
     fetchMedia();
-  }, [selectedPatient, activeReferralId]);
+  }, [selectedPatient, activeReferral]);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -105,7 +107,8 @@ export default function UploaderClient() {
     formData.append("file", file);
     formData.append("image_type", imageType);
 
-    if (activeReferralId !== null) formData.append("photography_referral_id", String(activeReferralId));
+    if (activeReferral?.kind === "surgery") formData.append("photography_referral_id", String(activeReferral.id));
+    if (activeReferral?.kind === "visit") formData.append("visit_photography_referral_id", String(activeReferral.id));
     try {
       const res = await fetch(`/api/patients/${selectedPatient.id}/media`, {
         method: "POST",
@@ -120,7 +123,7 @@ export default function UploaderClient() {
       setFile(null);
       const mRes = await fetch(`/api/patients/${selectedPatient.id}/media`);
       if (mRes.ok) setMediaList(await mRes.json());
-      if (activeReferralId !== null) await fetchReferrals();
+      if (activeReferral !== null) await fetchReferrals();
     } catch {
       setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
     } finally {
@@ -128,14 +131,14 @@ export default function UploaderClient() {
     }
   }
 
-  async function completeReferral(referralId: number) {
-    setCompletingReferralId(referralId);
+  async function completeReferral(referral: PhotographyReferral) {
+    setCompletingReferralId(referral.id);
     setMsg("");
     try {
-      const response = await fetch(`/api/photography-referrals/${referralId}`, {
+      const response = await fetch(`/api/photography-referrals/${referral.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ complete: true }),
+        body: JSON.stringify({ complete: true, referral_kind: referral.referral_kind }),
       });
       const data = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
@@ -143,7 +146,7 @@ export default function UploaderClient() {
         return;
       }
       setMsg("عکاسی تکمیل و به منشی اطلاع داده شد.");
-      setActiveReferralId(null);
+      setActiveReferral(null);
       await fetchReferrals();
     } catch {
       setMsg("ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
@@ -194,7 +197,7 @@ export default function UploaderClient() {
           ) : referrals.map((referral) => (
             <button
               type="button"
-              key={referral.id}
+              key={`${referral.referral_kind}-${referral.id}`}
               onClick={() => {
                 setFile(null);
                 setSelectedPatient({
@@ -205,14 +208,18 @@ export default function UploaderClient() {
                   phone: referral.phone,
                   surgery_type: referral.surgery_type,
                 });
-                setActiveReferralId(referral.id);
+                setActiveReferral({ id: referral.id, kind: referral.referral_kind });
                 setSearch(`${referral.first_name} ${referral.last_name}`);
                 setMsg("");
               }}
-              className={`w-full rounded-xl border p-3 text-right transition-colors ${activeReferralId === referral.id ? "border-violet-300 bg-white" : "border-violet-100 bg-white/70 hover:bg-white"}`}
+              className={`w-full rounded-xl border p-3 text-right transition-colors ${activeReferral?.id === referral.id && activeReferral.kind === referral.referral_kind ? "border-violet-300 bg-white" : "border-violet-100 bg-white/70 hover:bg-white"}`}
             >
               <span className="block text-sm font-bold text-gray-900">{referral.first_name} {referral.last_name} · پرونده {referral.daily_number.toLocaleString("fa-IR")}</span>
-              <span className="mt-1 block text-xs text-gray-600">عمل: {referral.appointment_date}، ساعت {referral.appointment_time} · {referral.hospital_name}</span>
+              <span className="mt-1 block text-xs text-gray-600">
+                {referral.referral_kind === "surgery"
+                  ? `عمل: ${referral.appointment_date || "-"}، ساعت ${referral.appointment_time || "-"} · ${referral.hospital_name || "-"}`
+                  : `ویزیت پزشک · ارجاع ${new Date(referral.referred_at).toLocaleDateString("fa-IR")}`}
+              </span>
               <span className="mt-1 block text-xs font-bold text-violet-800">عکس جدید ثبت‌شده: {Number(referral.photo_count).toLocaleString("fa-IR")}</span>
             </button>
           ))}
@@ -227,7 +234,7 @@ export default function UploaderClient() {
           {patients.map((p) => (
             <div
               key={p.id}
-              onClick={() => { setFile(null); setActiveReferralId(null); setSelectedPatient(p); }}
+              onClick={() => { setFile(null); setActiveReferral(null); setSelectedPatient(p); }}
               className={`p-3.5 rounded-2xl cursor-pointer text-sm flex justify-between items-center transition-all ${
                 selectedPatient?.id === p.id ? "bg-brand-green text-white font-bold shadow-md" : "bg-gray-50 hover:bg-gray-100"
               }`}
@@ -248,29 +255,29 @@ export default function UploaderClient() {
 
         {selectedPatient ? (
           <div className="space-y-6">
-            {activeReferralId !== null && (() => {
-              const activeReferral = referrals.find((item) => item.id === activeReferralId);
-              if (!activeReferral) return null;
+            {activeReferral !== null && (() => {
+              const activeReferralItem = referrals.find((item) => item.id === activeReferral.id && item.referral_kind === activeReferral.kind);
+              if (!activeReferralItem) return null;
               return (
                 <div className="space-y-2 rounded-2xl border border-violet-200 bg-violet-50 p-4">
                   <p className="flex items-center gap-2 text-sm font-black text-violet-950"><Camera size={17} /> این بیمار از طرف منشی ارجاع شده است</p>
-                  <p className="text-xs leading-5 text-violet-900">پس از ثبت عکس‌های لازم در همین پرونده، ارجاع را تکمیل کنید. تا این لحظه {Number(activeReferral.photo_count).toLocaleString("fa-IR")} عکس جدید برای این ارجاع ثبت شده است.</p>
+                  <p className="text-xs leading-5 text-violet-900">پس از ثبت عکس‌های لازم در همین پرونده، ارجاع را تکمیل کنید. تا این لحظه {Number(activeReferralItem.photo_count).toLocaleString("fa-IR")} عکس جدید برای این ارجاع ثبت شده است.</p>
                   <button
                     type="button"
-                    disabled={completingReferralId !== null || Number(activeReferral.photo_count) === 0}
-                    onClick={() => void completeReferral(activeReferral.id)}
+                    disabled={completingReferralId !== null || Number(activeReferralItem.photo_count) === 0}
+                    onClick={() => void completeReferral(activeReferralItem)}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {completingReferralId === activeReferral.id ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                    {completingReferralId === activeReferral.id ? "در حال ثبت..." : "تکمیل ارجاع عکاسی"}
+                    {completingReferralId === activeReferralItem.id ? <LoaderCircle size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                    {completingReferralId === activeReferralItem.id ? "در حال ثبت..." : "تکمیل ارجاع عکاسی"}
                   </button>
-                  {Number(activeReferral.photo_count) === 0 && <p className="text-xs text-violet-800">برای بستن ارجاع، ابتدا دست‌کم یک عکس جدید ثبت کنید.</p>}
+                  {Number(activeReferralItem.photo_count) === 0 && <p className="text-xs text-violet-800">برای بستن ارجاع، ابتدا دست‌کم یک عکس جدید ثبت کنید.</p>}
                 </div>
               );
             })()}
             <div className="bg-emerald-50 p-4 rounded-2xl text-sm font-bold text-emerald-900 flex justify-between items-center">
               <span>بیمار: {selectedPatient.first_name} {selectedPatient.last_name}</span>
-              <button onClick={() => { setFile(null); setActiveReferralId(null); setSelectedPatient(null); }} className="text-xs text-red-600 underline">تغییر</button>
+              <button onClick={() => { setFile(null); setActiveReferral(null); setSelectedPatient(null); }} className="text-xs text-red-600 underline">تغییر</button>
             </div>
 
             {/* فرم انتخاب فایل حرفه‌ای با آیکون و ظاهر مدرن */}

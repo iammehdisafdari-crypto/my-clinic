@@ -52,8 +52,11 @@ export async function GET(_req: Request, ctx: Ctx) {
     .prepare(
       `SELECT v.*, p.daily_number, p.admission_date, p.first_name, p.last_name, p.phone, p.landline,
               p.father_name, p.age, p.job, p.marital_status, p.residence_area, p.surgery_type,
-              p.referral_source, p.notes AS patient_notes
-       FROM visits v JOIN patients p ON p.id = v.patient_id WHERE v.id = ?`
+              p.referral_source, p.notes AS patient_notes,
+              pr.id AS photography_referral_id, pr.status AS photography_referral_status
+       FROM visits v JOIN patients p ON p.id = v.patient_id
+       LEFT JOIN visit_photography_referrals pr ON pr.visit_id = v.id
+       WHERE v.id = ?`
     )
     .bind(id)
     .first();

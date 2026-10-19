@@ -25,6 +25,8 @@ type Visit = {
   surgeon_name: string | null;
   surgery_cost: number | null;
   history: Partial<History> | null;
+  photography_referral_id: number | null;
+  photography_referral_status: "pending" | "completed" | null;
 };
 
 const emptyEntry = (): Entry => ({ none: false, items: [], when: "", note: "" });
@@ -58,7 +60,7 @@ function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; chi
   );
 }
 
-export default function VisitDetail({ id, canDoctor }: { id: number; canDoctor: boolean }) {
+export default function VisitDetail({ id, canDoctor, canReferPhotographer }: { id: number; canDoctor: boolean; canReferPhotographer: boolean }) {
   const router = useRouter();
   const [visit, setVisit] = useState<Visit | null>(null);
   const [surgeons, setSurgeons] = useState<string[]>([]);
@@ -71,6 +73,8 @@ export default function VisitDetail({ id, canDoctor }: { id: number; canDoctor: 
   const [showMissing, setShowMissing] = useState(false);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [referringPhotographer, setReferringPhotographer] = useState(false);
+  const [photographyMsg, setPhotographyMsg] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -133,6 +137,37 @@ export default function VisitDetail({ id, canDoctor }: { id: number; canDoctor: 
     setSaving(false);
     if (r.ok) router.push("/dashboard/visits");
     else setMsg(data.error || "خطا");
+  }
+
+  async function referToPhotographer() {
+    if (!visit || referringPhotographer || visit.photography_referral_id) return;
+    setReferringPhotographer(true);
+    setPhotographyMsg("");
+    try {
+      const response = await fetch("/api/photography-referrals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visit_id: id }),
+      });
+      const data = await response.json().catch(() => ({})) as {
+        id?: number;
+        status?: "pending" | "completed";
+        error?: string;
+        notificationWarning?: string;
+        already_exists?: boolean;
+      };
+      if (!response.ok) throw new Error(data.error || "ارجاع به عکاس انجام نشد. دوباره تلاش کنید.");
+      setVisit((current) => current ? {
+        ...current,
+        photography_referral_id: data.id ?? current.photography_referral_id,
+        photography_referral_status: data.status || "pending",
+      } : current);
+      setPhotographyMsg(data.notificationWarning || (data.already_exists ? "این پرونده قبلاً به عکاس ارجاع شده است." : "پرونده به صف عکاسی ارجاع شد."));
+    } catch (error) {
+      setPhotographyMsg(error instanceof Error ? error.message : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید.");
+    } finally {
+      setReferringPhotographer(false);
+    }
   }
 
   if (err) return <p className="text-sm text-red-600">{err}</p>;
@@ -296,6 +331,29 @@ export default function VisitDetail({ id, canDoctor }: { id: number; canDoctor: 
         </p>
       ) : (
         <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
+          {canReferPhotographer && (
+            <section className="rounded-2xl border border-violet-100 bg-violet-50/70 p-4 space-y-3">
+              <div>
+                <p className="font-bold text-sm text-violet-950">ارجاع پرونده به عکاس</p>
+                <p className="mt-1 text-xs leading-5 text-violet-800">با ثبت ارجاع، پرونده در صف پنل عکاسی قرار می‌گیرد و برای عکاس اعلان داخلی ارسال می‌شود.</p>
+              </div>
+              {visit.photography_referral_status === "pending" ? (
+                <p className="rounded-xl bg-amber-100 px-3 py-2 text-xs font-bold text-amber-800">این پرونده در انتظار عکاسی است.</p>
+              ) : visit.photography_referral_status === "completed" ? (
+                <p className="rounded-xl bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800">عکاسی این پرونده تکمیل شده است.</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void referToPhotographer()}
+                  disabled={referringPhotographer}
+                  className="rounded-xl bg-violet-700 px-5 py-2.5 text-sm font-bold text-white hover:bg-violet-800 disabled:cursor-wait disabled:opacity-60"
+                >
+                  {referringPhotographer ? "در حال ارجاع..." : "ارجاع به عکاس"}
+                </button>
+              )}
+              {photographyMsg && <p role="status" className="text-xs font-bold text-violet-900">{photographyMsg}</p>}
+            </section>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-gray-400">نام جراح</p>

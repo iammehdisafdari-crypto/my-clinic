@@ -5,7 +5,7 @@ import VisitDetail from "./VisitDetail";
 export const runtime = "edge";
 
 export default async function VisitPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requireRole(["scheduler", "nurse", "manager", "doctor"]);
+  const user = await requireRole(["scheduler", "admission", "nurse", "manager", "doctor"]);
   const { id } = await params;
   return (
     <div className="space-y-6">
@@ -15,7 +15,11 @@ export default async function VisitPage({ params }: { params: Promise<{ id: stri
           بازگشت به لیست
         </Link>
       </div>
-      <VisitDetail id={Number(id)} canDoctor={can(user.role, "visits:doctor")} />
+      <VisitDetail
+        id={Number(id)}
+        canDoctor={can(user.role, "visits:doctor")}
+        canReferPhotographer={can(user.role, "visits:refer")}
+      />
     </div>
   );
 }
