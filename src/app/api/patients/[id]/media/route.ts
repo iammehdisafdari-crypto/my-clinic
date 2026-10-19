@@ -15,7 +15,7 @@ export async function GET(_req: Request, ctx: Ctx) {
 
   const db = getDB();
   const { results } = await db
-    .prepare("SELECT id, image_url, image_type, created_at, photography_referral_id FROM patient_media WHERE patient_id = ? ORDER BY id DESC")
+    .prepare("SELECT id, image_url, image_type, created_at, photography_referral_id, visit_photography_referral_id FROM patient_media WHERE patient_id = ? ORDER BY id DESC")
     .bind(patientId)
     .all();
 
@@ -35,13 +35,19 @@ export async function POST(request: Request, ctx: Ctx) {
     const image_type = normText(formData.get("image_type"));
     const referralIdValue = formData.get("photography_referral_id");
     const referralId = referralIdValue === null ? null : Number(referralIdValue);
+    const visitReferralIdValue = formData.get("visit_photography_referral_id");
+    const visitReferralId = visitReferralIdValue === null ? null : Number(visitReferralIdValue);
 
     if (!file) return Response.json({ error: "انتخاب فایل تصویر الزامی است" }, { status: 400 });
     if (image_type !== "before" && image_type !== "after" && image_type !== "current")
       return Response.json({ error: "نوع تصویر نامعتبر است" }, { status: 400 });
     if (referralId !== null && (!Number.isInteger(referralId) || referralId <= 0))
       return Response.json({ error: "ارجاع عکاسی نامعتبر است" }, { status: 400 });
-    if (image_type === "current" && referralId !== null)
+    if (visitReferralId !== null && (!Number.isInteger(visitReferralId) || visitReferralId <= 0))
+      return Response.json({ error: "ارجاع عکاسی نامعتبر است" }, { status: 400 });
+    if (referralId !== null && visitReferralId !== null)
+      return Response.json({ error: "فقط یک ارجاع عکاسی را انتخاب کنید" }, { status: 400 });
+    if (image_type === "current" && (referralId !== null || visitReferralId !== null))
       return Response.json({ error: "عکس وضعیت فعلی را نمی‌توان برای ارجاع عکاسی ثبت کرد" }, { status: 400 });
 
     // تبدیل فایل به Base64 جهت ذخیره مستقیم و سریع در دیتابیس یا فضای ابری
@@ -60,10 +66,17 @@ export async function POST(request: Request, ctx: Ctx) {
         .first();
       if (!referral) return Response.json({ error: "این ارجاع عکاسی فعال نیست یا به بیمار دیگری مربوط است" }, { status: 409 });
     }
+    if (visitReferralId !== null) {
+      const referral = await db
+        .prepare("SELECT id FROM visit_photography_referrals WHERE id = ? AND patient_id = ? AND status = 'pending'")
+        .bind(visitReferralId, patientId)
+        .first();
+      if (!referral) return Response.json({ error: "این ارجاع عکاسی فعال نیست یا به بیمار دیگری مربوط است" }, { status: 409 });
+    }
 
     await db
-      .prepare("INSERT INTO patient_media (patient_id, image_url, image_type, photography_referral_id) VALUES (?, ?, ?, ?)")
-      .bind(patientId, base64Image, image_type, referralId)
+      .prepare("INSERT INTO patient_media (patient_id, image_url, image_type, photography_referral_id, visit_photography_referral_id) VALUES (?, ?, ?, ?, ?)")
+      .bind(patientId, base64Image, image_type, referralId, visitReferralId)
       .run();
 
     return Response.json({ ok: true });

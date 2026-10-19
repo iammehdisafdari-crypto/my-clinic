@@ -14,12 +14,24 @@ export async function GET() {
                 a.appointment_date, a.appointment_time, a.hospital_name,
                 p.daily_number, p.first_name, p.last_name, p.phone, p.surgery_type,
                 (SELECT COUNT(*) FROM patient_media m
-                 WHERE m.photography_referral_id = r.id) AS photo_count
+                 WHERE m.photography_referral_id = r.id) AS photo_count,
+                'surgery' AS referral_kind, NULL AS visit_id
          FROM photography_referrals r
          JOIN appointments a ON a.id = r.appointment_id
          JOIN patients p ON p.id = r.patient_id
          WHERE r.status = 'pending'
-         ORDER BY r.referred_at ASC, r.id ASC`
+         UNION ALL
+         SELECT r.id, NULL AS appointment_id, r.patient_id, NULL AS notified_channel, r.referred_at, r.status,
+                v.visit_date AS appointment_date, NULL AS appointment_time, NULL AS hospital_name,
+                p.daily_number, p.first_name, p.last_name, p.phone, p.surgery_type,
+                (SELECT COUNT(*) FROM patient_media m
+                 WHERE m.visit_photography_referral_id = r.id) AS photo_count,
+                'visit' AS referral_kind, r.visit_id
+         FROM visit_photography_referrals r
+         JOIN visits v ON v.id = r.visit_id
+         JOIN patients p ON p.id = r.patient_id
+         WHERE r.status = 'pending'
+         ORDER BY referred_at ASC, id ASC`
       )
       .all();
     return Response.json(results);
@@ -30,10 +42,76 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const visitId = Number(body.visit_id);
+  if (Number.isInteger(visitId) && visitId > 0) {
+    const { user, error } = await guard("visits:refer");
+    if (error) return error;
+
+    const db = getDB();
+    try {
+      const visit = (await db
+        .prepare(
+          `SELECT v.id, v.patient_id, v.status, p.daily_number, p.first_name, p.last_name
+           FROM visits v JOIN patients p ON p.id = v.patient_id WHERE v.id = ?`
+        )
+        .bind(visitId)
+        .first()) as { id: number; patient_id: number; status: string; daily_number: number; first_name: string; last_name: string } | null;
+      if (!visit) return Response.json({ error: "پرونده ویزیت پیدا نشد." }, { status: 404 });
+      if (visit.status !== "completed")
+        return Response.json({ error: "ابتدا باید پزشک ویزیت را تکمیل کند." }, { status: 409 });
+
+      const existing = (await db
+        .prepare("SELECT id, status FROM visit_photography_referrals WHERE visit_id = ?")
+        .bind(visitId)
+        .first()) as { id: number; status: string } | null;
+      if (existing)
+        return Response.json({ ok: true, id: existing.id, status: existing.status, already_exists: true });
+
+      let inserted: any;
+      try {
+        inserted = await db
+          .prepare("INSERT INTO visit_photography_referrals (visit_id, patient_id, referred_by) VALUES (?, ?, ?)")
+          .bind(visitId, visit.patient_id, user.uid)
+          .run();
+      } catch (insertError) {
+        const raced = (await db
+          .prepare("SELECT id, status FROM visit_photography_referrals WHERE visit_id = ?")
+          .bind(visitId)
+          .first()) as { id: number; status: string } | null;
+        if (raced)
+          return Response.json({ ok: true, id: raced.id, status: raced.status, already_exists: true });
+        throw insertError;
+      }
+
+      let notificationWarning: string | undefined;
+      try {
+        const notification = await db
+          .prepare(
+            `INSERT INTO notifications (user_id, title, message)
+             SELECT id, ?, ? FROM users WHERE role IN ('uploader', 'photographer') AND active = 1`
+          )
+          .bind(
+            "پروندهٔ جدید برای عکاسی",
+            `پرونده ${visit.daily_number} — ${visit.first_name} ${visit.last_name} پس از ویزیت پزشک برای عکاسی ارجاع شد.`
+          )
+          .run();
+        if (!Number(notification.meta.changes || 0)) notificationWarning = "ارجاع ثبت شد، اما عکاس فعالی برای دریافت اعلان پیدا نشد.";
+      } catch (notificationError) {
+        console.error("VISIT_PHOTOGRAPHY_REFERRAL_NOTIFICATION_FAILED", notificationError);
+        notificationWarning = "ارجاع در صف عکاسی ثبت شد، اما اعلان داخلی ارسال نشد.";
+      }
+
+      return Response.json({ ok: true, id: Number(inserted.meta.last_row_id), status: "pending", notificationWarning }, { status: 201 });
+    } catch (error) {
+      console.error("VISIT_PHOTOGRAPHY_REFERRAL_CREATE_FAILED", error);
+      return Response.json({ error: "ارجاع پرونده به عکاس ثبت نشد. دوباره تلاش کنید." }, { status: 500 });
+    }
+  }
+
   const { user, error } = await guard("surgeries:write");
   if (error) return error;
 
-  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const appointmentId = Number(body.appointment_id);
   const channel = body.channel;
   if (!Number.isInteger(appointmentId) || appointmentId <= 0)
@@ -90,7 +168,7 @@ export async function POST(request: Request) {
         .prepare(
           `INSERT INTO notifications (user_id, title, message)
            SELECT id, ?, ? FROM users
-           WHERE role = 'uploader' AND active = 1`
+           WHERE role IN ('uploader', 'photographer') AND active = 1`
         )
         .bind(
           "ارجاع جدید برای عکاسی",

@@ -4,7 +4,7 @@ import VisitsClient from "./VisitsClient";
 export const runtime = "edge";
 
 export default async function VisitsPage() {
-  const user = await requireRole(["scheduler", "nurse", "manager", "doctor"]);
+  const user = await requireRole(["scheduler", "admission", "nurse", "manager", "doctor"]);
   const canDoctor = can(user.role, "visits:doctor");
   return (
     <div className="space-y-6">
