@@ -12,7 +12,6 @@ function messageLinks(phone: string, message: string) {
   const normalizedPhone = toEnDigits(phone).replace(/\D/g, "").replace(/^0/, "98");
   return {
     whatsappUrl: `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`,
-    telegramUrl: `https://t.me/share/url?url=&text=${encodeURIComponent(message)}`,
   };
 }
 
