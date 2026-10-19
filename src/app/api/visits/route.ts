@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const { results } = await getDB()
     .prepare(
-      `SELECT v.id, v.patient_id, v.visit_date, v.status, COALESCE(v.referred_at, v.created_at) AS referred_at, v.completed_at,
+      `SELECT v.id, v.patient_id, v.visit_date, v.status, COALESCE(v.referred_at, v.created_at, '') AS referred_at, v.completed_at,
               v.surgery_date, p.first_name, p.last_name, p.phone, p.age, p.surgery_type, p.daily_number
        FROM visits v JOIN patients p ON p.id = v.patient_id
        WHERE v.visit_date = ?
