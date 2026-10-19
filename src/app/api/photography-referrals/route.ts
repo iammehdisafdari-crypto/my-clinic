@@ -130,7 +130,7 @@ export async function POST(request: Request) {
   const channel = body.channel;
   if (!Number.isInteger(appointmentId) || appointmentId <= 0)
     return Response.json({ error: "نوبت عمل نامعتبر است." }, { status: 400 });
-  if (channel !== "whatsapp" && channel !== "telegram")
+  if (channel !== "whatsapp" && channel !== "telegram" && channel !== "rubika")
     return Response.json({ error: "روش اطلاع‌رسانی را انتخاب کنید." }, { status: 400 });
   if (body.confirmed_sent !== true)
     return Response.json({ error: "ابتدا ارسال پیام به بیمار را تأیید کنید." }, { status: 400 });

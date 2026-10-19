@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { toJalaliDate, getTodayGregorian } from "@/lib/jalali";
+import { openRubikaAndCopyMessage } from "@/lib/rubika";
 import JalaliDatePicker from "../../JalaliDatePicker";
 
 type Patient = {
@@ -26,10 +27,9 @@ type SurgeryAppointment = {
   surgery_type: string | null;
   photography_referral_id: number | null;
   photography_status: "pending" | "completed" | null;
-  photography_channel: "whatsapp" | "telegram" | null;
+  photography_channel: "whatsapp" | "telegram" | "rubika" | null;
   patientMessageText: string;
   whatsappUrl: string;
-  telegramUrl: string;
 };
 
 const SURGERY_SLOTS = ["08:00", "09:30", "11:00", "13:00", "14:30", "16:00"];
@@ -55,7 +55,7 @@ export default function SchedulerSurgeriesClient() {
   
   const [description, setDescription] = useState("");
   const [msg, setMsg] = useState("");
-  const [openedChannel, setOpenedChannel] = useState<Record<number, "whatsapp" | "telegram">>({});
+  const [openedChannel, setOpenedChannel] = useState<Record<number, "whatsapp" | "rubika">>({});
   const [referringAppointmentId, setReferringAppointmentId] = useState<number | null>(null);
   const [referralFeedback, setReferralFeedback] = useState<{ appointmentId: number; text: string; warning?: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
@@ -157,6 +157,18 @@ export default function SchedulerSurgeriesClient() {
     } finally {
       setReferringAppointmentId(null);
     }
+  }
+
+  async function openRubikaForAppointment(appointment: SurgeryAppointment) {
+    const copied = await openRubikaAndCopyMessage(appointment.patientMessageText);
+    setOpenedChannel((current) => ({ ...current, [appointment.id]: "rubika" }));
+    setReferralFeedback({
+      appointmentId: appointment.id,
+      text: copied
+        ? "روبیکا باز شد و متن پیام کپی شد؛ مخاطب را انتخاب و پیام را ارسال کنید."
+        : "روبیکا باز شد؛ متن پیام را از بخش «متن پیام» کپی و برای بیمار ارسال کنید.",
+      warning: !copied,
+    });
   }
 
   const bookedTimes = surgeries.map((s) => s.appointment_time);
@@ -284,7 +296,7 @@ export default function SchedulerSurgeriesClient() {
                 {s.photography_status ? (
                   <p className={`rounded-xl px-3 py-2 text-xs font-bold ${s.photography_status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                     {s.photography_status === "completed" ? "عکاسی تکمیل شده" : "در انتظار عکاس"}
-                    {s.photography_channel ? ` · پیام بیمار از طریق ${s.photography_channel === "whatsapp" ? "واتس‌اپ" : "تلگرام"} ارسال شده` : ""}
+                    {s.photography_channel ? ` · پیام بیمار از طریق ${s.photography_channel === "whatsapp" ? "واتس‌اپ" : s.photography_channel === "rubika" ? "روبیکا" : "تلگرام"} ارسال شده` : ""}
                   </p>
                 ) : (
                   <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-3">
@@ -297,13 +309,11 @@ export default function SchedulerSurgeriesClient() {
                         onClick={() => setOpenedChannel((current) => ({ ...current, [s.id]: "whatsapp" }))}
                         className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
                       >ارسال با واتس‌اپ</a>
-                      <a
-                        href={s.telegramUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={() => setOpenedChannel((current) => ({ ...current, [s.id]: "telegram" }))}
-                        className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700"
-                      >ارسال با تلگرام</a>
+                      <button
+                        type="button"
+                        onClick={() => openRubikaForAppointment(s)}
+                        className="rounded-lg bg-violet-700 px-3 py-2 text-xs font-bold text-white hover:bg-violet-800"
+                      >ارسال با روبیکا</button>
                     </div>
                     <details className="text-xs text-gray-600">
                       <summary className="cursor-pointer font-bold">متن پیام</summary>

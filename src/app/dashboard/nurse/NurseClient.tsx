@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Upload, Stethoscope, UserPlus } from "lucide-react";
 import { toJalaliDate, getTodayGregorian } from "@/lib/jalali";
+import { openRubikaAndCopyMessage } from "@/lib/rubika";
 import JalaliDatePicker from "@/app/dashboard/JalaliDatePicker";
 
 type Patient = {
@@ -63,7 +64,7 @@ export default function NurseClient() {
   const [temp, setTemp] = useState("");
 
   const [msg, setMsg] = useState("");
-  const [appointmentMessage, setAppointmentMessage] = useState<{ text: string; whatsappUrl: string; telegramUrl: string } | null>(null);
+  const [appointmentMessage, setAppointmentMessage] = useState<{ text: string; whatsappUrl: string; rubikaNotice?: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   function toEnglishDigits(value: string) {
@@ -242,7 +243,6 @@ export default function NurseClient() {
       setAppointmentMessage({
         text,
         whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
-        telegramUrl: `https://t.me/share/url?url=&text=${encodeURIComponent(text)}`,
       });
       setMsg("نوبت ثبت شد؛ پیام آماده است. برای ارسال، یکی از پیام‌رسان‌ها را انتخاب کنید.");
       setNotes("");
@@ -251,6 +251,15 @@ export default function NurseClient() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleRubikaAppointmentNotice() {
+    if (!appointmentMessage) return;
+    const copied = await openRubikaAndCopyMessage(appointmentMessage.text);
+    const notice = copied
+      ? "روبیکا باز شد و متن پیام کپی شد؛ مخاطب را انتخاب و پیام را ارسال کنید."
+      : "روبیکا باز شد؛ متن پیام را از کادر بالا کپی و در گفت‌وگوی بیمار ارسال کنید.";
+    setAppointmentMessage((current) => current ? { ...current, rubikaNotice: notice } : current);
   }
 
   async function handleSaveVitals(e: React.FormEvent) {
@@ -491,9 +500,11 @@ export default function NurseClient() {
             <p className="rounded-xl bg-white p-3 text-xs leading-6 text-gray-700">{appointmentMessage.text}</p>
             <div className="flex gap-3">
               <a href={appointmentMessage.whatsappUrl} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-green-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-green-700">ارسال با واتس‌اپ</a>
-              <a href={appointmentMessage.telegramUrl} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-sky-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-sky-700">ارسال با تلگرام</a>
+              <button type="button" onClick={handleRubikaAppointmentNotice} className="flex-1 rounded-xl bg-violet-700 px-3 py-2 text-center text-sm font-bold text-white hover:bg-violet-800">ارسال با روبیکا</button>
             </div>
-            <p className="text-xs text-gray-600">پیام‌رسان باز می‌شود؛ برای ارسال نهایی، پیام را در همان برنامه بفرستید.</p>
+            {appointmentMessage.rubikaNotice
+              ? <p role="status" className="text-xs font-bold text-violet-800">{appointmentMessage.rubikaNotice}</p>
+              : <p className="text-xs text-gray-600">برای روبیکا، دکمه را بزنید؛ متن کپی می‌شود تا در گفت‌وگوی بیمار ارسال کنید.</p>}
           </div>
         )}
 

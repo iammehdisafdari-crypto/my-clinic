@@ -25,7 +25,7 @@ type PhotographyReferral = {
   visit_id: number | null;
   referral_kind: "surgery" | "visit";
   patient_id: number;
-  notified_channel: "whatsapp" | "telegram" | null;
+  notified_channel: "whatsapp" | "telegram" | "rubika" | null;
   referred_at: string;
   appointment_date: string | null;
   appointment_time: string | null;
