@@ -90,6 +90,17 @@ export async function PATCH(request: Request, ctx: Ctx) {
     const h = cleanHistory(b.history);
     if (!h.data) return Response.json({ error: h.error }, { status: 400 });
 
+    const before = (await db
+      .prepare(
+        `SELECT v.status, p.daily_number, p.first_name, p.last_name
+         FROM visits v JOIN patients p ON p.id = v.patient_id WHERE v.id = ?`
+      )
+      .bind(id)
+      .first()) as
+      | { status: string; daily_number: number; first_name: string; last_name: string }
+      | null;
+    if (!before) return Response.json({ error: "ویزیت پیدا نشد" }, { status: 404 });
+
     const res = await db
       .prepare(
         `UPDATE visits
@@ -100,6 +111,23 @@ export async function PATCH(request: Request, ctx: Ctx) {
       .bind(normText(b.surgeon_name).slice(0, 60) || null, cost, JSON.stringify(h.data), user.uid, id)
       .run();
     if (!res.meta.changes) return Response.json({ error: "ویزیت پیدا نشد" }, { status: 404 });
+
+    if (before.status !== "completed") {
+      try {
+        await db
+          .prepare(
+            `INSERT INTO notifications (user_id, title, message)
+             SELECT id, ?, ? FROM users WHERE role = 'scheduler' AND active = 1`
+          )
+          .bind(
+            "ویزیت تکمیل شد؛ اقدام منشی لازم است",
+            `پرونده ${before.daily_number} — ${before.first_name} ${before.last_name} توسط پزشک ویزیت شد و برای پیگیری منشی آماده است.`
+          )
+          .run();
+      } catch (notificationError) {
+        console.error("VISIT_COMPLETION_NOTIFICATION_FAILED", notificationError);
+      }
+    }
     return Response.json({ ok: true });
   }
 

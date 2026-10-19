@@ -14,6 +14,8 @@ type Patient = {
 type SurgeryAppointment = {
   id: number;
   patient_id: number;
+  daily_number: number;
+  appointment_date: string;
   appointment_time: string;
   hospital_name: string;
   hospital_address: string;
@@ -22,6 +24,12 @@ type SurgeryAppointment = {
   last_name: string;
   phone: string;
   surgery_type: string | null;
+  photography_referral_id: number | null;
+  photography_status: "pending" | "completed" | null;
+  photography_channel: "whatsapp" | "telegram" | null;
+  patientMessageText: string;
+  whatsappUrl: string;
+  telegramUrl: string;
 };
 
 const SURGERY_SLOTS = ["08:00", "09:30", "11:00", "13:00", "14:30", "16:00"];
@@ -47,7 +55,9 @@ export default function SchedulerSurgeriesClient() {
   
   const [description, setDescription] = useState("");
   const [msg, setMsg] = useState("");
-  const [links, setLinks] = useState<{ whatsappUrl?: string; telegramUrl?: string; text?: string } | null>(null);
+  const [openedChannel, setOpenedChannel] = useState<Record<number, "whatsapp" | "telegram">>({});
+  const [referringAppointmentId, setReferringAppointmentId] = useState<number | null>(null);
+  const [referralFeedback, setReferralFeedback] = useState<{ appointmentId: number; text: string; warning?: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -84,39 +94,68 @@ export default function SchedulerSurgeriesClient() {
 
     setLoading(true);
     setMsg("");
-    setLinks(null);
 
-    const res = await fetch("/api/surgeries", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patient_id: selectedPatient.id,
-        appointment_date: date,
-        appointment_time: selectedTime,
-        hospital_name: hospitalName,
-        hospital_address: hospitalAddress,
-        description,
-      }),
-    });
-
-    const data = await res.json();
-    setLoading(false);
-
-    if (res.ok) {
-      setMsg(`نوبت جراحی با موفقیت ثبت شد و اعلان‌ها ارسال شدند.`);
-      setLinks({
-        whatsappUrl: data.whatsappUrl,
-        telegramUrl: data.telegramUrl,
-        text: data.patientMessageText,
+    try {
+      const res = await fetch("/api/surgeries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: selectedPatient.id,
+          appointment_date: date,
+          appointment_time: selectedTime,
+          hospital_name: hospitalName,
+          hospital_address: hospitalAddress,
+          description,
+        }),
       });
+
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        setMsg(data.error || "خطا در ثبت نوبت جراحی");
+        return;
+      }
+
+      setMsg("نوبت جراحی ثبت شد. پیام آماده را از کارت نوبت در فهرست کناری برای بیمار ارسال کنید.");
       setSelectedTime("");
       setDescription("");
       setSelectedPatient(null);
-      
       const r = await fetch(`/api/surgeries?date=${date}`);
       if (r.ok) setSurgeries(await r.json());
-    } else {
-      setMsg(data.error || "خطا در ثبت نوبت جراحی");
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. پیش از ثبت دوباره، فهرست نوبت‌های همین روز را بررسی کنید.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function referToPhotographer(appointment: SurgeryAppointment) {
+    const channel = openedChannel[appointment.id];
+    if (!channel || referringAppointmentId !== null) return;
+    setReferringAppointmentId(appointment.id);
+    setReferralFeedback(null);
+    try {
+      const response = await fetch("/api/photography-referrals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointment_id: appointment.id, channel, confirmed_sent: true }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string; already_exists?: boolean; notificationWarning?: string };
+      if (!response.ok) throw new Error(data.error || "ارجاع به عکاس ثبت نشد. دوباره تلاش کنید.");
+      setReferralFeedback({
+        appointmentId: appointment.id,
+        text: data.notificationWarning || (data.already_exists ? "این نوبت قبلاً به عکاس ارجاع شده است." : "بیمار به صف عکاسی ارجاع شد."),
+        warning: Boolean(data.notificationWarning),
+      });
+      const refreshed = await fetch(`/api/surgeries?date=${date}`);
+      if (refreshed.ok) setSurgeries(await refreshed.json());
+    } catch (error) {
+      setReferralFeedback({
+        appointmentId: appointment.id,
+        text: error instanceof Error ? error.message : "ارتباط با سرور برقرار نشد. دوباره تلاش کنید.",
+        warning: true,
+      });
+    } finally {
+      setReferringAppointmentId(null);
     }
   }
 
@@ -223,20 +262,6 @@ export default function SchedulerSurgeriesClient() {
 
         {msg && <p className="text-sm text-center font-bold text-gray-700 bg-gray-50 p-3 rounded-xl border border-gray-100">{msg}</p>}
 
-        {links && (
-          <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl space-y-3">
-            <p className="font-bold text-sm text-emerald-900">ارسال پیام اطلاع‌رسانی به بیمار:</p>
-            <p className="text-xs text-gray-600 bg-white p-3 rounded-xl whitespace-pre-wrap">{links.text}</p>
-            <div className="flex gap-3">
-              <a href={links.whatsappUrl} target="_blank" rel="noreferrer" className="flex-1 bg-green-600 text-white text-center py-2 rounded-xl text-sm font-bold hover:bg-green-700 transition-colors">
-                ارسال از طریق واتس‌اپ
-              </a>
-              <a href={links.telegramUrl} target="_blank" rel="noreferrer" className="flex-1 bg-sky-500 text-white text-center py-2 rounded-xl text-sm font-bold hover:bg-sky-600 transition-colors">
-                ارسال از طریق تلگرام
-              </a>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* لیست جراحی‌ها */}
@@ -247,12 +272,60 @@ export default function SchedulerSurgeriesClient() {
             <p className="text-sm text-gray-400 text-center py-10">هیچ جراحی‌ای ثبت نشده است.</p>
           ) : (
             surgeries.map((s) => (
-              <div key={s.id} className="p-4 rounded-2xl border border-gray-100 bg-gray-50 space-y-2">
+              <div key={s.id} className="p-4 rounded-2xl border border-gray-100 bg-gray-50 space-y-3">
                 <div className="flex justify-between items-center">
-                  <p className="font-bold text-base text-gray-900">{s.first_name} {s.last_name}</p>
+                  <div>
+                    <p className="font-bold text-base text-gray-900">{s.first_name} {s.last_name}</p>
+                    <p className="text-xs text-gray-500">پرونده {s.daily_number.toLocaleString("fa-IR")} · {s.phone}</p>
+                  </div>
                   <span className="font-mono font-black text-brand-green text-base">{s.appointment_time}</span>
                 </div>
                 <p className="text-xs text-gray-600"><b>بیمارستان:</b> {s.hospital_name} {s.hospital_address ? `(${s.hospital_address})` : ""}</p>
+                {s.photography_status ? (
+                  <p className={`rounded-xl px-3 py-2 text-xs font-bold ${s.photography_status === "completed" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                    {s.photography_status === "completed" ? "عکاسی تکمیل شده" : "در انتظار عکاس"}
+                    {s.photography_channel ? ` · پیام بیمار از طریق ${s.photography_channel === "whatsapp" ? "واتس‌اپ" : "تلگرام"} ارسال شده` : ""}
+                  </p>
+                ) : (
+                  <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-3">
+                    <p className="text-xs font-bold text-gray-700">۱. پیام نوبت را برای بیمار ارسال کنید:</p>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href={s.whatsappUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setOpenedChannel((current) => ({ ...current, [s.id]: "whatsapp" }))}
+                        className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
+                      >ارسال با واتس‌اپ</a>
+                      <a
+                        href={s.telegramUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={() => setOpenedChannel((current) => ({ ...current, [s.id]: "telegram" }))}
+                        className="rounded-lg bg-sky-600 px-3 py-2 text-xs font-bold text-white hover:bg-sky-700"
+                      >ارسال با تلگرام</a>
+                    </div>
+                    <details className="text-xs text-gray-600">
+                      <summary className="cursor-pointer font-bold">متن پیام</summary>
+                      <p className="mt-2 whitespace-pre-wrap leading-6">{s.patientMessageText}</p>
+                    </details>
+                    {openedChannel[s.id] && (
+                      <button
+                        type="button"
+                        disabled={referringAppointmentId !== null}
+                        onClick={() => referToPhotographer(s)}
+                        className="w-full rounded-lg bg-brand-green px-3 py-2.5 text-xs font-bold text-white hover:bg-brand-green/90 disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {referringAppointmentId === s.id ? "در حال ارجاع..." : "۲. پیام را ارسال کردم؛ ارجاع به عکاس"}
+                      </button>
+                    )}
+                  </div>
+                )}
+                {referralFeedback?.appointmentId === s.id && (
+                  <p role={referralFeedback.warning ? "alert" : "status"} className={`text-xs font-bold ${referralFeedback.warning ? "text-amber-700" : "text-emerald-700"}`}>
+                    {referralFeedback.text}
+                  </p>
+                )}
               </div>
             ))
           )}

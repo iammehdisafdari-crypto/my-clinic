@@ -6,7 +6,7 @@ type Row = {
   id: number;
   patient_id: number;
   status: "referred" | "completed";
-  referred_at: string;
+  referred_at: string | null;
   first_name: string;
   last_name: string;
   age: number | null;
@@ -15,8 +15,11 @@ type Row = {
 };
 
 // ساعت ارجاع به وقت تهران
-function timeOf(s: string) {
-  return new Date(s.replace(" ", "T") + "Z").toLocaleTimeString("fa-IR", {
+function timeOf(value: string | null | undefined) {
+  if (!value || typeof value !== "string") return "-";
+  const timestamp = new Date(value.replace(" ", "T") + "Z");
+  if (Number.isNaN(timestamp.getTime())) return "-";
+  return timestamp.toLocaleTimeString("fa-IR", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Asia/Tehran",

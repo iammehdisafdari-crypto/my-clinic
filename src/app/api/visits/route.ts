@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 
   const { results } = await getDB()
     .prepare(
-      `SELECT v.id, v.patient_id, v.visit_date, v.status, v.referred_at, v.completed_at,
+      `SELECT v.id, v.patient_id, v.visit_date, v.status, COALESCE(v.referred_at, v.created_at, '') AS referred_at, v.completed_at,
               v.surgery_date, p.first_name, p.last_name, p.phone, p.age, p.surgery_type, p.daily_number
        FROM visits v JOIN patients p ON p.id = v.patient_id
        WHERE v.visit_date = ?
@@ -40,19 +40,47 @@ export async function POST(request: Request) {
     return Response.json({ error: "بیمار نامعتبر است" }, { status: 400 });
 
   const db = getDB();
-  const patient = await db.prepare("SELECT id FROM patients WHERE id = ?").bind(pid).first();
-  if (!patient) return Response.json({ error: "بیمار پیدا نشد" }, { status: 404 });
+  try {
+    const patient = (await db
+      .prepare("SELECT id, daily_number, first_name, last_name FROM patients WHERE id = ?")
+      .bind(pid)
+      .first()) as { id: number; daily_number: number; first_name: string; last_name: string } | null;
+    if (!patient) return Response.json({ error: "بیمار پیدا نشد" }, { status: 404 });
 
-  const date = todayTehran();
-  const dup = await db
-    .prepare("SELECT id FROM visits WHERE patient_id = ? AND visit_date = ? AND status = 'referred'")
-    .bind(pid, date)
-    .first();
-  if (dup) return Response.json({ error: "این بیمار امروز قبلاً به دکتر ارجاع شده" }, { status: 409 });
+    const date = todayTehran();
+    const res = await db
+      .prepare(
+        `INSERT INTO visits (patient_id, visit_date, referred_by, referred_at)
+         SELECT ?, ?, ?, CURRENT_TIMESTAMP
+         WHERE NOT EXISTS (
+           SELECT 1 FROM visits WHERE patient_id = ? AND visit_date = ? AND status = 'referred'
+         )`
+      )
+      .bind(pid, date, user.uid, pid, date)
+      .run();
+    if (!res.meta.changes)
+      return Response.json({ error: "این بیمار امروز قبلاً به دکتر ارجاع شده" }, { status: 409 });
+    const visitId = Number(res.meta.last_row_id);
 
-  const res = await db
-    .prepare("INSERT INTO visits (patient_id, visit_date, referred_by) VALUES (?, ?, ?)")
-    .bind(pid, date, user.uid)
-    .run();
-  return Response.json({ ok: true, id: res.meta.last_row_id });
+    // اعلان داخلی best-effort است؛ شکست اعلان نباید ارجاع ثبت‌شده را ناموفق نشان دهد.
+    try {
+      await db
+        .prepare(
+          `INSERT INTO notifications (user_id, title, message)
+           SELECT id, ?, ? FROM users WHERE role = 'doctor' AND active = 1`
+        )
+        .bind(
+          "بیمار جدید در صف ویزیت",
+          `پرونده ${patient.daily_number} — ${patient.first_name} ${patient.last_name} به صف ویزیت امروز اضافه شد.`
+        )
+        .run();
+    } catch (notificationError) {
+      console.error("VISIT_REFERRAL_NOTIFICATION_FAILED", notificationError);
+    }
+
+    return Response.json({ ok: true, id: visitId }, { status: 201 });
+  } catch (cause) {
+    console.error("VISIT_REFERRAL_CREATE_FAILED", cause);
+    return Response.json({ error: "ارجاع بیمار در سامانه ثبت نشد. کمی بعد دوباره تلاش کنید." }, { status: 500 });
+  }
 }

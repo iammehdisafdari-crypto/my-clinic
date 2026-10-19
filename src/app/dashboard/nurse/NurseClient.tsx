@@ -33,6 +33,7 @@ const NURSE_SERVICES = [
   { id: "taping", label: "نوبت چسب" },
   { id: "splint", label: "آتل" },
   { id: "stitches", label: "بخیه" },
+  { id: "tampon", label: "نوبت تامپون" },
   { id: "examination", label: "معاینه" },
   { id: "dissatisfaction", label: "نارضایتی بیمار" },
   { id: "cortisone", label: "نوبت کورتن" },
@@ -66,6 +67,7 @@ export default function NurseClient() {
   const [temp, setTemp] = useState("");
 
   const [msg, setMsg] = useState("");
+  const [appointmentMessage, setAppointmentMessage] = useState<{ text: string; whatsappUrl: string; telegramUrl: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   function toEnglishDigits(value: string) {
@@ -218,26 +220,40 @@ export default function NurseClient() {
     if (!selectedPatient) return;
 
     setLoading(true);
-    const serviceLabel = NURSE_SERVICES.find((s) => s.id === serviceType)?.label;
-    const res = await fetch("/api/appointments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patient_id: selectedPatient.id,
-        type: "consultation",
-        appointment_date: aptDate,
-        appointment_time: aptTime,
-        description: `[خدمت پرستاری: ${serviceLabel}]${notes ? ` ${notes}` : ""}`,
-      }),
-    });
+    setMsg("");
+    setAppointmentMessage(null);
+    const serviceLabel = NURSE_SERVICES.find((s) => s.id === serviceType)?.label || "خدمت پرستاری";
+    try {
+      const res = await fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: selectedPatient.id,
+          type: "consultation",
+          appointment_date: aptDate,
+          appointment_time: aptTime,
+          description: `[خدمت پرستاری: ${serviceLabel}]${notes ? ` ${notes}` : ""}`,
+        }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        setMsg(data.error || "ثبت نوبت پرستاری انجام نشد. دوباره تلاش کنید.");
+        return;
+      }
 
-    setLoading(false);
-    if (res.ok) {
-      setMsg("نوبت و خدمت پرستاری با موفقیت ثبت شد.");
+      const phone = toEnglishDigits(selectedPatient.phone).replace(/\D/g, "").replace(/^0/, "98");
+      const text = `سلام ${selectedPatient.first_name} عزیز، نوبت ${serviceLabel} شما برای تاریخ ${toJalaliDate(aptDate)} ساعت ${aptTime} ثبت شد. لطفاً در زمان مقرر مراجعه کنید. با تشکر`;
+      setAppointmentMessage({
+        text,
+        whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        telegramUrl: `https://t.me/share/url?url=&text=${encodeURIComponent(text)}`,
+      });
+      setMsg("نوبت ثبت شد؛ پیام آماده است. برای ارسال، یکی از پیام‌رسان‌ها را انتخاب کنید.");
       setNotes("");
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setMsg(data.error || "خطا در ثبت نوبت");
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد. وضعیت نوبت را بررسی و دوباره تلاش کنید.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -373,7 +389,7 @@ export default function NurseClient() {
           {patients.map((p) => (
             <div
               key={p.id}
-              onClick={() => setSelectedPatient(p)}
+              onClick={() => { setAppointmentMessage(null); setSelectedPatient(p); }}
               className={`p-3.5 rounded-2xl cursor-pointer text-sm flex justify-between items-center transition-all ${
                 selectedPatient?.id === p.id
                   ? "bg-brand-green text-white font-bold shadow-md"
@@ -410,7 +426,7 @@ export default function NurseClient() {
             </span>
             <button
               type="button"
-              onClick={() => setSelectedPatient(null)}
+                onClick={() => { setAppointmentMessage(null); setSelectedPatient(null); }}
               className="text-xs text-red-600 hover:text-red-700 underline font-medium"
             >
               تغییر بیمار
@@ -433,7 +449,7 @@ export default function NurseClient() {
             <select
               className={inputClass}
               value={serviceType}
-              onChange={(e) => setServiceType(e.target.value)}
+              onChange={(e) => { setAppointmentMessage(null); setServiceType(e.target.value); }}
             >
               {NURSE_SERVICES.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -443,7 +459,7 @@ export default function NurseClient() {
             </select>
             <JalaliDatePicker
               value={aptDate}
-              onChange={(gDate) => setAptDate(gDate)}
+              onChange={(gDate) => { setAppointmentMessage(null); setAptDate(gDate); }}
               className={inputClass}
             />
           </div>
@@ -452,7 +468,7 @@ export default function NurseClient() {
             <input
               type="time"
               value={aptTime}
-              onChange={(e) => setAptTime(e.target.value)}
+              onChange={(e) => { setAppointmentMessage(null); setAptTime(e.target.value); }}
               className={inputClass}
               required
             />
@@ -472,6 +488,18 @@ export default function NurseClient() {
             ثبت نوبت خدمت پرستاری
           </button>
         </form>
+
+        {appointmentMessage && (
+          <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <p role="status" className="text-sm font-bold text-emerald-900">پیام آماده‌ی اطلاع‌رسانی به بیمار:</p>
+            <p className="rounded-xl bg-white p-3 text-xs leading-6 text-gray-700">{appointmentMessage.text}</p>
+            <div className="flex gap-3">
+              <a href={appointmentMessage.whatsappUrl} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-green-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-green-700">ارسال با واتس‌اپ</a>
+              <a href={appointmentMessage.telegramUrl} target="_blank" rel="noreferrer" className="flex-1 rounded-xl bg-sky-600 px-3 py-2 text-center text-sm font-bold text-white hover:bg-sky-700">ارسال با تلگرام</a>
+            </div>
+            <p className="text-xs text-gray-600">پیام‌رسان باز می‌شود؛ برای ارسال نهایی، پیام را در همان برنامه بفرستید.</p>
+          </div>
+        )}
 
         {selectedPatient ? (
           <div className="space-y-6">

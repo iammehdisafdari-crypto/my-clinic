@@ -1,5 +1,4 @@
--- مرحله ۳: ویزیت‌ها (ارجاع منشی، فرم دکتر، تکمیل منشی)
--- این فایل چیزی را پاک نمی‌کند، فقط یک جدول جدید می‌سازد
+-- مرحله ۳: پایهٔ ویزیت‌ها؛ ستون‌های تکمیلی گردش کار در مهاجرت 0005 افزوده می‌شوند.
 
 CREATE TABLE visits (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -8,23 +7,11 @@ CREATE TABLE visits (
   status TEXT NOT NULL DEFAULT 'referred'
     CHECK(status IN ('referred', 'completed')),
 
-  -- ارجاع توسط منشی
-  referred_by INTEGER REFERENCES users(id),
-  referred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
   -- بخش دکتر
   doctor_id INTEGER REFERENCES users(id),
-  surgeon_name TEXT,                       -- نام جراح
-  surgery_cost INTEGER,                    -- هزینه جراحی (تومان)
-  history TEXT,                            -- سوابق (JSON)
-  completed_at DATETIME,
-
-  -- بخش منشی بعد از دکتر
-  surgery_date TEXT,                       -- تاریخ جراحی
-  reservation_fee INTEGER,                 -- هزینه رزرو (تومان)
-  photography_fee INTEGER,                 -- هزینه فتوگرافی پزشکی (تومان)
-  updated_by INTEGER REFERENCES users(id),
-  updated_at DATETIME
+  surgeon_name TEXT,
+  notes TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_visits_date_status ON visits(visit_date, status);
