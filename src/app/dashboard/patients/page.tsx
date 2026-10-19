@@ -4,7 +4,7 @@ import PatientsClient from "./PatientsClient";
 export const runtime = "edge";
 
 export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader"]);
+  const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader", "photographer"]);
   const { q } = await searchParams;
   return (
     <div className="space-y-6">
