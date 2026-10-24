@@ -42,11 +42,12 @@ export default function Shell({
     return () => window.removeEventListener("hashchange", syncHash);
   }, []);
 
-  // لینک اول «صفحه اصلی» است و فقط با آدرس دقیقش روشن می‌شود
+  // Keep the home item inactive while a dashboard section shortcut is selected.
   const isActive = (l: NavLink, i: number) => {
     const [hrefPath, hrefHash] = l.href.split("#");
     if (hrefHash) return path === hrefPath && activeHash === `#${hrefHash}`;
-    return i === 0 ? path === l.href : path === l.href || path.startsWith(l.href + "/");
+    if (i === 0) return path === l.href && activeHash === "";
+    return path === l.href || path.startsWith(l.href + "/");
   };
 
   function search(e: React.FormEvent) {
