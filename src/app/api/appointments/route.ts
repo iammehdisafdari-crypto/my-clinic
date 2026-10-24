@@ -6,20 +6,38 @@ export const runtime = "edge";
 
 // گرفتن نوبت‌ها یا اسلات‌های یک روز مشخص
 export async function GET(request: Request) {
-  const { error } = await guard("patients:read");
+  const { user, error } = await guard("patients:read");
   if (error) return error;
 
   const url = new URL(request.url);
   const date = url.searchParams.get("date");
   const type = url.searchParams.get("type") || "consultation";
+  const mine = url.searchParams.get("mine") === "1";
+  const db = getDB();
+
+  if (mine) {
+    const { results } = await db
+      .prepare(
+        `SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time,
+                a.status, a.type, a.description, p.first_name, p.last_name, p.phone
+         FROM appointments a
+         JOIN patients p ON p.id = a.patient_id
+         WHERE a.created_by = ?
+         ORDER BY a.appointment_date DESC, a.appointment_time DESC
+         LIMIT 100`
+      )
+      .bind(user.uid)
+      .all();
+
+    return Response.json(results);
+  }
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date))
     return Response.json({ error: "تاریخ نامعتبر است" }, { status: 400 });
 
-  const db = getDB();
   const { results } = await db
     .prepare(
-      `SELECT a.id, a.patient_id, a.appointment_time, a.status, a.type,
+      `SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.status, a.type,
               p.first_name, p.last_name, p.phone
        FROM appointments a
        JOIN patients p ON p.id = a.patient_id
