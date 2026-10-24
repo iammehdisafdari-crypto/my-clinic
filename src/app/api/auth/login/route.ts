@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     const db = getDB();
     const user = await db
-      .prepare("SELECT * FROM users WHERE (username = ?1 OR email = ?1) AND active = 1")
+      .prepare("SELECT * FROM users WHERE (username = ?1 COLLATE NOCASE OR email = ?1 COLLATE NOCASE) AND active = 1")
       .bind(username)
       .first();
 

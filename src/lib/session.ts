@@ -45,7 +45,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
     let cleanName = typeof payload.name === "string" ? payload.name : "مدیر";
     // اگر نام در توکن آسیب دیده بود
-    if (cleanName.includes("")) {
+    if (cleanName.includes("\u0000")) {
       cleanName = "مدیر سیستم";
     }
 
@@ -62,7 +62,7 @@ export async function getSession(): Promise<SessionUser | null> {
             uid,
             id: uid,
             role: String(row.role),
-            name: fetchedName.includes("") || !fetchedName ? "مدیر سیستم" : fetchedName,
+            name: fetchedName.includes("\u0000") || !fetchedName ? "مدیر سیستم" : fetchedName,
             username: String(row.username || ""),
           };
         }
