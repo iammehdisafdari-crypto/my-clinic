@@ -30,6 +30,16 @@ type VitalItem = {
   created_at: string;
 };
 
+type NurseAppointment = {
+  id: number;
+  appointment_date: string;
+  appointment_time: string;
+  status: "pending" | "confirmed" | "cancelled" | "completed";
+  description: string | null;
+  first_name: string;
+  last_name: string;
+};
+
 const NURSE_SERVICES = [
   { id: "taping", label: "چسب" },
   { id: "splint_stitches", label: "آتل و بخیه" },
@@ -52,6 +62,8 @@ export default function NurseClient() {
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
   const [vitalsList, setVitalsList] = useState<VitalItem[]>([]);
+  const [myAppointments, setMyAppointments] = useState<NurseAppointment[]>([]);
+  const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   const [serviceType, setServiceType] = useState(NURSE_SERVICES[0].id);
@@ -71,6 +83,19 @@ export default function NurseClient() {
     return value
       .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
       .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
+  }
+
+  async function refreshMyAppointments() {
+    try {
+      const response = await fetch("/api/appointments?mine=1", { cache: "no-store" });
+      if (!response.ok) return false;
+      setMyAppointments((await response.json()) as NurseAppointment[]);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setAppointmentsLoading(false);
+    }
   }
 
   async function handleCreatePatient(force = false) {
@@ -146,6 +171,12 @@ export default function NurseClient() {
     const t = setTimeout(fetchPatients, 300);
     return () => clearTimeout(t);
   }, [search]);
+
+  useEffect(() => {
+    void refreshMyAppointments();
+    const interval = window.setInterval(() => void refreshMyAppointments(), 15000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -238,6 +269,7 @@ export default function NurseClient() {
         return;
       }
 
+      await refreshMyAppointments();
       const phone = toEnglishDigits(selectedPatient.phone).replace(/\D/g, "").replace(/^0/, "98");
       const text = `سلام ${selectedPatient.first_name} عزیز، نوبت ${serviceLabel} شما برای تاریخ ${toJalaliDate(aptDate)} ساعت ${aptTime} ثبت شد. لطفاً در زمان مقرر مراجعه کنید. با تشکر`;
       setAppointmentMessage({
@@ -493,6 +525,40 @@ export default function NurseClient() {
             ثبت نوبت خدمت پرستاری
           </button>
         </form>
+
+        <section aria-live="polite" className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="font-black text-sm text-sky-950">گزارش نوبت‌های ثبت‌شده توسط شما</h3>
+              <p className="mt-1 text-xs text-sky-800">فهرست هر ۱۵ ثانیه به‌روز می‌شود و پس از ثبت نوبت فوراً تازه خواهد شد.</p>
+            </div>
+            <button type="button" onClick={() => void refreshMyAppointments()} className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-100">
+              به‌روزرسانی
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-center text-xs">
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-sky-900">{myAppointments.length}</span>کل نوبت‌ها</div>
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-emerald-700">{myAppointments.filter((a) => a.status === "pending" || a.status === "confirmed").length}</span>در انتظار یا تأییدشده</div>
+          </div>
+          <div className="max-h-64 space-y-2 overflow-y-auto">
+            {myAppointments.map((appointment) => (
+              <div key={appointment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-100 bg-white p-3 text-xs">
+                <div>
+                  <p className="font-bold text-gray-900">{appointment.first_name} {appointment.last_name}</p>
+                  <p className="mt-1 text-gray-500">{appointment.description?.match(/\[خدمت پرستاری: ([^\]]+)\]/)?.[1] || "خدمت پرستاری"}</p>
+                </div>
+                <div className="text-left">
+                  <p className="font-bold text-gray-800">{toJalaliDate(appointment.appointment_date)} — {appointment.appointment_time}</p>
+                  <p className={`mt-1 font-bold ${appointment.status === "cancelled" ? "text-red-600" : appointment.status === "completed" ? "text-gray-500" : "text-emerald-700"}`}>
+                    {appointment.status === "pending" ? "ثبت‌شده، در انتظار" : appointment.status === "confirmed" ? "تأییدشده" : appointment.status === "cancelled" ? "لغوشده" : "انجام‌شده"}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {!appointmentsLoading && myAppointments.length === 0 && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">هنوز نوبتی توسط شما ثبت نشده است.</p>}
+            {appointmentsLoading && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">در حال دریافت گزارش نوبت‌ها...</p>}
+          </div>
+        </section>
 
         {appointmentMessage && (
           <div className="space-y-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
