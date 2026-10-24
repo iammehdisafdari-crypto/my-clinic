@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Upload, Stethoscope, UserPlus } from "lucide-react";
 import { toJalaliDate, getTodayGregorian } from "@/lib/jalali";
 import { openRubikaAndCopyMessage } from "@/lib/rubika";
@@ -35,9 +35,27 @@ type NurseAppointment = {
   appointment_date: string;
   appointment_time: string;
   status: "pending" | "confirmed" | "cancelled" | "completed";
+  attendance_status: "pending" | "attended" | "no_show";
+  related_surgery_appointment_id: number;
+  surgery_date: string;
   description: string | null;
+  daily_number: number;
   first_name: string;
   last_name: string;
+  phone: string;
+  nurse_name: string | null;
+};
+
+type FollowupCandidate = {
+  surgery_appointment_id: number;
+  surgery_date: string;
+  surgery_time: string;
+  hospital_name: string | null;
+  patient_id: number;
+  daily_number: number;
+  first_name: string;
+  last_name: string;
+  phone: string;
 };
 
 const NURSE_SERVICES = [
@@ -63,6 +81,10 @@ export default function NurseClient() {
   const [deletingMediaId, setDeletingMediaId] = useState<number | null>(null);
   const [vitalsList, setVitalsList] = useState<VitalItem[]>([]);
   const [myAppointments, setMyAppointments] = useState<NurseAppointment[]>([]);
+  const [followupCandidates, setFollowupCandidates] = useState<FollowupCandidate[]>([]);
+  const [selectedFollowupSurgery, setSelectedFollowupSurgery] = useState<FollowupCandidate | null>(null);
+  const [followupSearch, setFollowupSearch] = useState("");
+  const [attendanceUpdatingId, setAttendanceUpdatingId] = useState<number | null>(null);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
@@ -85,18 +107,20 @@ export default function NurseClient() {
       .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)));
   }
 
-  async function refreshMyAppointments() {
+  const refreshMyAppointments = useCallback(async () => {
     try {
-      const response = await fetch("/api/appointments?mine=1", { cache: "no-store" });
+      const response = await fetch(`/api/nurses/followups?q=${encodeURIComponent(followupSearch)}`, { cache: "no-store" });
       if (!response.ok) return false;
-      setMyAppointments((await response.json()) as NurseAppointment[]);
+      const data = (await response.json()) as { candidates: FollowupCandidate[]; appointments: NurseAppointment[] };
+      setFollowupCandidates(data.candidates);
+      setMyAppointments(data.appointments);
       return true;
     } catch {
       return false;
     } finally {
       setAppointmentsLoading(false);
     }
-  }
+  }, [followupSearch]);
 
   async function handleCreatePatient(force = false) {
     setPatientMsg("");
@@ -176,7 +200,7 @@ export default function NurseClient() {
     void refreshMyAppointments();
     const interval = window.setInterval(() => void refreshMyAppointments(), 15000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [refreshMyAppointments]);
 
   useEffect(() => {
     if (!selectedPatient) {
@@ -245,43 +269,75 @@ export default function NurseClient() {
 
   async function handleBookNurseService(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedPatient) return;
+    if (!selectedPatient || !selectedFollowupSurgery) {
+      setMsg("ابتدا بیمار را از فهرست «بدون نوبت پیگیری» انتخاب کنید.");
+      return;
+    }
 
     setLoading(true);
     setMsg("");
     setAppointmentMessage(null);
     const serviceLabel = NURSE_SERVICES.find((s) => s.id === serviceType)?.label || "خدمت پرستاری";
     try {
-      const res = await fetch("/api/appointments", {
+      const response = await fetch("/api/nurses/followups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          patient_id: selectedPatient.id,
-          type: "consultation",
+          surgery_appointment_id: selectedFollowupSurgery.surgery_appointment_id,
+          service_type: serviceType,
           appointment_date: aptDate,
           appointment_time: aptTime,
-          description: `[خدمت پرستاری: ${serviceLabel}]${notes ? ` ${notes}` : ""}`,
+          notes,
         }),
       });
-      const data = await res.json().catch(() => ({})) as { error?: string };
-      if (!res.ok) {
-        setMsg(data.error || "ثبت نوبت پرستاری انجام نشد. دوباره تلاش کنید.");
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        patient?: { first_name: string; last_name: string; phone: string };
+        appointment_date?: string;
+        appointment_time?: string;
+        whatsappUrl?: string;
+      };
+      if (!response.ok || !data.patient || !data.appointment_date || !data.appointment_time) {
+        setMsg(data.error || "ثبت نوبت پیگیری انجام نشد. دوباره تلاش کنید.");
         return;
       }
 
       await refreshMyAppointments();
-      const phone = toEnglishDigits(selectedPatient.phone).replace(/\D/g, "").replace(/^0/, "98");
-      const text = `سلام ${selectedPatient.first_name} عزیز، نوبت ${serviceLabel} شما برای تاریخ ${toJalaliDate(aptDate)} ساعت ${aptTime} ثبت شد. لطفاً در زمان مقرر مراجعه کنید. با تشکر`;
+      const phone = toEnglishDigits(data.patient.phone).replace(/\D/g, "").replace(/^0/, "98");
+      const text = `سلام ${data.patient.first_name} عزیز، نوبت پیگیری ${serviceLabel} شما برای تاریخ ${toJalaliDate(data.appointment_date)} ساعت ${data.appointment_time} ثبت شد. لطفاً در زمان مقرر مراجعه کنید. با تشکر`;
       setAppointmentMessage({
         text,
-        whatsappUrl: `https://wa.me/${phone}?text=${encodeURIComponent(text)}`,
+        whatsappUrl: `${data.whatsappUrl || `https://wa.me/${phone}`}?text=${encodeURIComponent(text)}`,
       });
-      setMsg("نوبت ثبت شد؛ پیام آماده است. برای ارسال، یکی از پیام‌رسان‌ها را انتخاب کنید.");
+      setMsg("نوبت پیگیری پس از عمل ثبت شد و در گزارش شما قرار گرفت.");
       setNotes("");
+      setSelectedFollowupSurgery(null);
     } catch {
       setMsg("ارتباط با سرور برقرار نشد. وضعیت نوبت را بررسی و دوباره تلاش کنید.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function updateFollowupAttendance(appointmentId: number, attendanceStatus: "pending" | "attended" | "no_show") {
+    setAttendanceUpdatingId(appointmentId);
+    try {
+      const response = await fetch("/api/nurses/followups", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ appointment_id: appointmentId, attendance_status: attendanceStatus }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setMsg(data.error || "وضعیت مراجعه ذخیره نشد.");
+        return;
+      }
+      await refreshMyAppointments();
+      setMsg(attendanceStatus === "attended" ? "حضور بیمار ثبت شد." : attendanceStatus === "no_show" ? "عدم مراجعه بیمار ثبت شد." : "وضعیت نوبت به حالت در انتظار بازگشت.");
+    } catch {
+      setMsg("ارتباط با سرور برقرار نشد؛ وضعیت مراجعه ذخیره نشد.");
+    } finally {
+      setAttendanceUpdatingId(null);
     }
   }
 
@@ -333,6 +389,47 @@ export default function NurseClient() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 font-sans">
       {/* انتخاب بیمار */}
       <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
+        <section className="space-y-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+          <div>
+            <h2 className="font-black text-sm text-amber-950">بیماران پس از عمل بدون نوبت پیگیری</h2>
+            <p className="mt-1 text-xs text-amber-800">عمل‌های گذشته‌ای که هنوز نوبت پرستاری برایشان ثبت نشده است.</p>
+          </div>
+          <input
+            className={inputClass}
+            placeholder="جستجوی نام یا شماره پرونده..."
+            value={followupSearch}
+            onChange={(event) => setFollowupSearch(event.target.value)}
+          />
+          <div className="max-h-52 space-y-2 overflow-y-auto">
+            {followupCandidates.map((candidate) => (
+              <button
+                key={candidate.surgery_appointment_id}
+                type="button"
+                onClick={() => {
+                  setSelectedFollowupSurgery(candidate);
+                  setSelectedPatient({
+                    id: candidate.patient_id,
+                    daily_number: candidate.daily_number,
+                    first_name: candidate.first_name,
+                    last_name: candidate.last_name,
+                    phone: candidate.phone,
+                  });
+                  setSearch(`${candidate.first_name} ${candidate.last_name}`);
+                  setAppointmentMessage(null);
+                }}
+                className={`w-full rounded-xl border p-3 text-right text-xs transition-colors ${selectedFollowupSurgery?.surgery_appointment_id === candidate.surgery_appointment_id ? "border-amber-400 bg-amber-100" : "border-amber-100 bg-white hover:bg-amber-50"}`}
+              >
+                <span className="block font-bold text-gray-900">{candidate.first_name} {candidate.last_name} · پرونده {candidate.daily_number}</span>
+                <span className="mt-1 block text-gray-600">تاریخ عمل: {toJalaliDate(candidate.surgery_date)} · ساعت {candidate.surgery_time}</span>
+              </button>
+            ))}
+            {!appointmentsLoading && followupCandidates.length === 0 && (
+              <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">بیمارِ بدون نوبت پیگیری پیدا نشد.</p>
+            )}
+            {appointmentsLoading && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">در حال دریافت فهرست...</p>}
+          </div>
+        </section>
+
         <h2 className="text-lg font-black flex items-center gap-2 text-gray-900">
           <Stethoscope className="text-brand-green" size={20} />
           انتخاب بیمار
@@ -426,7 +523,7 @@ export default function NurseClient() {
           {patients.map((p) => (
             <div
               key={p.id}
-              onClick={() => { setAppointmentMessage(null); setSelectedPatient(p); }}
+              onClick={() => { setAppointmentMessage(null); setSelectedFollowupSurgery(null); setSelectedPatient(p); }}
               className={`p-3.5 rounded-2xl cursor-pointer text-sm flex justify-between items-center transition-all ${
                 selectedPatient?.id === p.id
                   ? "bg-brand-green text-white font-bold shadow-md"
@@ -463,7 +560,7 @@ export default function NurseClient() {
             </span>
             <button
               type="button"
-                onClick={() => { setAppointmentMessage(null); setSelectedPatient(null); }}
+                onClick={() => { setAppointmentMessage(null); setSelectedFollowupSurgery(null); setSelectedPatient(null); }}
               className="text-xs text-red-600 hover:text-red-700 underline font-medium"
             >
               تغییر بیمار
@@ -479,8 +576,15 @@ export default function NurseClient() {
           <p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-900">{patientMsg}</p>
         )}
 
+        {selectedFollowupSurgery ? (
+          <div className="rounded-xl border border-amber-100 bg-amber-50 p-3 text-xs font-bold text-amber-900">
+            نوبت پیگیری برای {selectedFollowupSurgery.first_name} {selectedFollowupSurgery.last_name} انتخاب شده است · عمل در {toJalaliDate(selectedFollowupSurgery.surgery_date)}
+          </div>
+        ) : (
+          <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-600">برای ثبت پیگیری، بیمار را از فهرست «بدون نوبت پیگیری» انتخاب کنید.</p>
+        )}
         <form onSubmit={handleBookNurseService} className="space-y-4 bg-gray-50 p-5 rounded-2xl border border-gray-100">
-          <p className="font-bold text-sm text-gray-800">ثبت نوبت خدمت پرستاری</p>
+          <p className="font-bold text-sm text-gray-800">ثبت نوبت پیگیری پس از عمل</p>
 
           <div className="grid grid-cols-2 gap-3">
             <select
@@ -519,7 +623,7 @@ export default function NurseClient() {
 
           <button
             type="submit"
-            disabled={loading || !selectedPatient}
+            disabled={loading || !selectedPatient || !selectedFollowupSurgery}
             className="w-full bg-brand-green text-white font-bold p-3 rounded-xl shadow-md hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
             ثبت نوبت خدمت پرستاری
@@ -529,33 +633,45 @@ export default function NurseClient() {
         <section aria-live="polite" className="space-y-3 rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <h3 className="font-black text-sm text-sky-950">گزارش نوبت‌های ثبت‌شده توسط شما</h3>
-              <p className="mt-1 text-xs text-sky-800">فهرست هر ۱۵ ثانیه به‌روز می‌شود و پس از ثبت نوبت فوراً تازه خواهد شد.</p>
+              <h3 className="font-black text-sm text-sky-950">گزارش نوبت‌های پیگیری شما</h3>
+              <p className="mt-1 text-xs text-sky-800">گزارش هر ۱۵ ثانیه و پس از هر تغییر فوراً به‌روز می‌شود.</p>
             </div>
             <button type="button" onClick={() => void refreshMyAppointments()} className="shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-bold text-sky-800 shadow-sm hover:bg-sky-100">
               به‌روزرسانی
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-2 text-center text-xs">
-            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-sky-900">{myAppointments.length}</span>کل نوبت‌ها</div>
-            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-emerald-700">{myAppointments.filter((a) => a.status === "pending" || a.status === "confirmed").length}</span>در انتظار یا تأییدشده</div>
+          <div className="grid grid-cols-2 gap-2 text-center text-xs sm:grid-cols-4">
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-amber-700">{followupCandidates.length}</span>بدون نوبت</div>
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-sky-900">{myAppointments.length}</span>نوبت‌گرفته</div>
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-emerald-700">{myAppointments.filter((a) => a.attendance_status === "attended").length}</span>مراجعه‌کرده</div>
+            <div className="rounded-xl bg-white p-2"><span className="block text-lg font-black text-red-700">{myAppointments.filter((a) => a.attendance_status === "no_show").length}</span>مراجعه‌نکرده</div>
           </div>
-          <div className="max-h-64 space-y-2 overflow-y-auto">
+          <div className="max-h-80 space-y-2 overflow-y-auto">
             {myAppointments.map((appointment) => (
-              <div key={appointment.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-sky-100 bg-white p-3 text-xs">
-                <div>
-                  <p className="font-bold text-gray-900">{appointment.first_name} {appointment.last_name}</p>
-                  <p className="mt-1 text-gray-500">{appointment.description?.match(/\[خدمت پرستاری: ([^\]]+)\]/)?.[1] || "خدمت پرستاری"}</p>
+              <div key={appointment.id} className="space-y-2 rounded-xl border border-sky-100 bg-white p-3 text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-gray-900">{appointment.first_name} {appointment.last_name} · پرونده {appointment.daily_number}</p>
+                    <p className="mt-1 text-gray-500">{appointment.description?.match(/\[خدمت پرستاری: ([^\]]+)\]/)?.[1] || "پیگیری پرستاری"} · عمل: {toJalaliDate(appointment.surgery_date)}</p>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-bold text-gray-800">{toJalaliDate(appointment.appointment_date)} — {appointment.appointment_time}</p>
+                    <p className={`mt-1 font-bold ${appointment.attendance_status === "attended" ? "text-emerald-700" : appointment.attendance_status === "no_show" ? "text-red-600" : "text-amber-700"}`}>
+                      {appointment.attendance_status === "attended" ? "مراجعه کرده" : appointment.attendance_status === "no_show" ? "مراجعه نکرده" : "در انتظار مراجعه"}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-left">
-                  <p className="font-bold text-gray-800">{toJalaliDate(appointment.appointment_date)} — {appointment.appointment_time}</p>
-                  <p className={`mt-1 font-bold ${appointment.status === "cancelled" ? "text-red-600" : appointment.status === "completed" ? "text-gray-500" : "text-emerald-700"}`}>
-                    {appointment.status === "pending" ? "ثبت‌شده، در انتظار" : appointment.status === "confirmed" ? "تأییدشده" : appointment.status === "cancelled" ? "لغوشده" : "انجام‌شده"}
-                  </p>
+                <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">
+                  <button type="button" disabled={attendanceUpdatingId === appointment.id} onClick={() => void updateFollowupAttendance(appointment.id, "attended")} className="rounded-lg bg-emerald-50 px-3 py-2 font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">مراجعه کرد</button>
+                  <button type="button" disabled={attendanceUpdatingId === appointment.id} onClick={() => void updateFollowupAttendance(appointment.id, "no_show")} className="rounded-lg bg-red-50 px-3 py-2 font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">مراجعه نکرد</button>
+                  {appointment.attendance_status !== "pending" && (
+                    <button type="button" disabled={attendanceUpdatingId === appointment.id} onClick={() => void updateFollowupAttendance(appointment.id, "pending")} className="rounded-lg bg-gray-100 px-3 py-2 font-bold text-gray-700 hover:bg-gray-200 disabled:opacity-50">بازنشانی وضعیت</button>
+                  )}
+                  {attendanceUpdatingId === appointment.id && <span className="self-center text-gray-500">در حال ذخیره...</span>}
                 </div>
               </div>
             ))}
-            {!appointmentsLoading && myAppointments.length === 0 && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">هنوز نوبتی توسط شما ثبت نشده است.</p>}
+            {!appointmentsLoading && myAppointments.length === 0 && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">هنوز نوبت پیگیری‌ای توسط شما ثبت نشده است.</p>}
             {appointmentsLoading && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">در حال دریافت گزارش نوبت‌ها...</p>}
           </div>
         </section>
