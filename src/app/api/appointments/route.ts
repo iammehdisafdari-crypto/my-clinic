@@ -6,7 +6,7 @@ export const runtime = "edge";
 
 // گرفتن نوبت‌ها یا اسلات‌های یک روز مشخص
 export async function GET(request: Request) {
-  const { error } = await guard("patients:read");
+  const { user, error } = await guard("patients:read");
   if (error) return error;
 
   const url = new URL(request.url);
