@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Upload, Stethoscope, UserPlus } from "lucide-react";
 import { toJalaliDate, getTodayGregorian } from "@/lib/jalali";
 import { openRubikaAndCopyMessage } from "@/lib/rubika";
@@ -84,6 +84,8 @@ export default function NurseClient() {
   const [followupCandidates, setFollowupCandidates] = useState<FollowupCandidate[]>([]);
   const [selectedFollowupSurgery, setSelectedFollowupSurgery] = useState<FollowupCandidate | null>(null);
   const [followupSearch, setFollowupSearch] = useState("");
+  const [followupSearchInput, setFollowupSearchInput] = useState("");
+  const followupRequestId = useRef(0);
   const [attendanceUpdatingId, setAttendanceUpdatingId] = useState<number | null>(null);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
   const [appointmentsError, setAppointmentsError] = useState("");
@@ -109,22 +111,26 @@ export default function NurseClient() {
   }
 
   const refreshMyAppointments = useCallback(async () => {
+    const requestId = ++followupRequestId.current;
     try {
       const response = await fetch(`/api/nurses/followups?q=${encodeURIComponent(followupSearch)}`, { cache: "no-store" });
+      if (requestId !== followupRequestId.current) return false;
       if (!response.ok) {
         setAppointmentsError("دریافت فهرست نوبت‌های پیگیری ممکن نشد. اتصال یا به‌روزرسانی پایگاه‌داده را بررسی کنید.");
         return false;
       }
       const data = (await response.json()) as { candidates: FollowupCandidate[]; appointments: NurseAppointment[] };
+      if (requestId !== followupRequestId.current) return false;
       setAppointmentsError("");
       setFollowupCandidates(data.candidates);
       setMyAppointments(data.appointments);
       return true;
     } catch {
-      setAppointmentsError("ارتباط با سرور برای دریافت گزارش نوبت‌ها برقرار نشد.");
+      if (requestId === followupRequestId.current)
+        setAppointmentsError("ارتباط با سرور برای دریافت گزارش نوبت‌ها برقرار نشد.");
       return false;
     } finally {
-      setAppointmentsLoading(false);
+      if (requestId === followupRequestId.current) setAppointmentsLoading(false);
     }
   }, [followupSearch]);
 
@@ -195,6 +201,11 @@ export default function NurseClient() {
   }
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setFollowupSearch(followupSearchInput.trim()), 300);
+    return () => window.clearTimeout(timer);
+  }, [followupSearchInput]);
+
+  useEffect(() => {
     const fetchPatients = async () => {
       const res = await fetch(`/api/patients?q=${encodeURIComponent(search)}`);
       if (res.ok) setPatients(await res.json());
@@ -204,9 +215,24 @@ export default function NurseClient() {
   }, [search]);
 
   useEffect(() => {
-    void refreshMyAppointments();
-    const interval = window.setInterval(() => void refreshMyAppointments(), 15000);
-    return () => window.clearInterval(interval);
+    let inFlight = false;
+    const refreshWhenVisible = async () => {
+      if (document.visibilityState !== "visible" || inFlight) return;
+      inFlight = true;
+      try {
+        await refreshMyAppointments();
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    void refreshWhenVisible();
+    const interval = window.setInterval(() => void refreshWhenVisible(), 60000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [refreshMyAppointments]);
 
   useEffect(() => {
@@ -404,8 +430,8 @@ export default function NurseClient() {
           <input
             className={inputClass}
             placeholder="جستجوی نام یا شماره پرونده..."
-            value={followupSearch}
-            onChange={(event) => setFollowupSearch(event.target.value)}
+            value={followupSearchInput}
+            onChange={(event) => setFollowupSearchInput(event.target.value)}
           />
           <div className="max-h-52 space-y-2 overflow-y-auto">
             {followupCandidates.map((candidate) => (
