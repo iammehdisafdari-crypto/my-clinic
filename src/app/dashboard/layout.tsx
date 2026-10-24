@@ -27,7 +27,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: "/dashboard/patients", label: "بیماران", icon: "patients", show: can(user.role, "patients:read") },
     { href: "/dashboard/visits", label: "ویزیت‌ها", icon: "visits", show: can(user.role, "visits:read") },
     { href: "/dashboard/scheduler/surgeries", label: "تقویم اتاق عمل", icon: "visits", show: user.role === "scheduler" || user.role === "manager" || user.role === "doctor" },
-    { href: "/dashboard/nurse", label: "پنل پرستاری", icon: "visits", show: user.role === "nurse" || user.role === "manager" || user.role === "doctor" },
+    { href: "/dashboard/nurse#followups", label: "پیگیری‌های پس از عمل", icon: "visits", show: user.role === "nurse" || user.role === "manager" || user.role === "doctor" || user.role === "admin" },
     { href: "/dashboard/uploader", label: "پنل عکاسی", icon: "patients", show: can(user.role, "photos:write") },
     { href: "/dashboard/users", label: "مدیریت کاربران", icon: "users", show: can(user.role, "users:manage") },
   ];
