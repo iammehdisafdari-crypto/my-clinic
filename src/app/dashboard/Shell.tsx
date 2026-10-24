@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, ClipboardList, UserCog, Search, Menu, Stethoscope } from "lucide-react";
@@ -33,10 +33,21 @@ export default function Shell({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [activeHash, setActiveHash] = useState("");
+
+  useEffect(() => {
+    const syncHash = () => setActiveHash(window.location.hash);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
 
   // لینک اول «صفحه اصلی» است و فقط با آدرس دقیقش روشن می‌شود
-  const isActive = (l: NavLink, i: number) =>
-    i === 0 ? path === l.href : path === l.href || path.startsWith(l.href + "/");
+  const isActive = (l: NavLink, i: number) => {
+    const [hrefPath, hrefHash] = l.href.split("#");
+    if (hrefHash) return path === hrefPath && activeHash === `#${hrefHash}`;
+    return i === 0 ? path === l.href : path === l.href || path.startsWith(l.href + "/");
+  };
 
   function search(e: React.FormEvent) {
     e.preventDefault();
@@ -65,7 +76,10 @@ export default function Shell({
             <Link
               key={l.href}
               href={l.href}
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                setActiveHash(l.href.includes("#") ? `#${l.href.split("#")[1]}` : "");
+              }}
               className={`relative flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition-colors ${
                 on ? "bg-white/10 text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
               }`}
