@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Bell } from "lucide-react";
 
 type Notif = {
@@ -14,16 +14,47 @@ export default function NotificationBell() {
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [open, setOpen] = useState(false);
 
-  async function fetchNotifs() {
-    const res = await fetch("/api/notifications");
-    if (res.ok) setNotifs(await res.json());
-  }
+  const fetchNotifs = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch("/api/notifications", { cache: "no-store", signal });
+      if (!res.ok) return;
+      const latest = (await res.json()) as Notif[];
+      setNotifs((current) => {
+        const unchanged =
+          current.length === latest.length &&
+          current.every((item, index) => {
+            const nextItem = latest[index];
+            return item.id === nextItem.id &&
+              item.is_read === nextItem.is_read &&
+              item.title === nextItem.title &&
+              item.message === nextItem.message &&
+              item.created_at === nextItem.created_at;
+          });
+        return unchanged ? current : latest;
+      });
+    } catch {
+      // A failed background refresh should not disrupt the dashboard.
+    }
+  }, []);
 
   useEffect(() => {
-    fetchNotifs();
-    const t = setInterval(fetchNotifs, 15000); // هر ۱۵ ثانیه بروزرسانی
-    return () => clearInterval(t);
-  }, []);
+    let controller: AbortController | null = null;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      controller?.abort();
+      controller = new AbortController();
+      void fetchNotifs(controller.signal);
+    };
+
+    refreshWhenVisible();
+    const timer = window.setInterval(refreshWhenVisible, 60000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      controller?.abort();
+    };
+  }, [fetchNotifs]);
 
   async function markAsRead() {
     setOpen(!open);
