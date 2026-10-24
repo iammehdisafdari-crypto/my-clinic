@@ -86,6 +86,7 @@ export default function NurseClient() {
   const [followupSearch, setFollowupSearch] = useState("");
   const [attendanceUpdatingId, setAttendanceUpdatingId] = useState<number | null>(null);
   const [appointmentsLoading, setAppointmentsLoading] = useState(true);
+  const [appointmentsError, setAppointmentsError] = useState("");
   const [currentFile, setCurrentFile] = useState<File | null>(null);
 
   const [serviceType, setServiceType] = useState(NURSE_SERVICES[0].id);
@@ -110,12 +111,17 @@ export default function NurseClient() {
   const refreshMyAppointments = useCallback(async () => {
     try {
       const response = await fetch(`/api/nurses/followups?q=${encodeURIComponent(followupSearch)}`, { cache: "no-store" });
-      if (!response.ok) return false;
+      if (!response.ok) {
+        setAppointmentsError("دریافت فهرست نوبت‌های پیگیری ممکن نشد. اتصال یا به‌روزرسانی پایگاه‌داده را بررسی کنید.");
+        return false;
+      }
       const data = (await response.json()) as { candidates: FollowupCandidate[]; appointments: NurseAppointment[] };
+      setAppointmentsError("");
       setFollowupCandidates(data.candidates);
       setMyAppointments(data.appointments);
       return true;
     } catch {
+      setAppointmentsError("ارتباط با سرور برای دریافت گزارش نوبت‌ها برقرار نشد.");
       return false;
     } finally {
       setAppointmentsLoading(false);
@@ -424,7 +430,7 @@ export default function NurseClient() {
                 <span className="mt-1 block text-gray-600">تاریخ عمل: {toJalaliDate(candidate.surgery_date)} · ساعت {candidate.surgery_time}</span>
               </button>
             ))}
-            {!appointmentsLoading && followupCandidates.length === 0 && (
+            {!appointmentsLoading && !appointmentsError && followupCandidates.length === 0 && (
               <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">بیمارِ بدون نوبت پیگیری پیدا نشد.</p>
             )}
             {appointmentsLoading && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">در حال دریافت فهرست...</p>}
@@ -673,7 +679,8 @@ export default function NurseClient() {
                 </div>
               </div>
             ))}
-            {!appointmentsLoading && myAppointments.length === 0 && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">هنوز نوبت پیگیری‌ای توسط شما ثبت نشده است.</p>}
+            {!appointmentsLoading && !appointmentsError && myAppointments.length === 0 && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">هنوز نوبت پیگیری‌ای توسط شما ثبت نشده است.</p>}
+            {appointmentsError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-center text-xs font-bold text-red-700">{appointmentsError}</p>}
             {appointmentsLoading && <p className="rounded-xl bg-white p-3 text-center text-xs text-gray-500">در حال دریافت گزارش نوبت‌ها...</p>}
           </div>
         </section>
