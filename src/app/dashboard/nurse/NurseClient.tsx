@@ -173,6 +173,7 @@ export default function NurseClient() {
         last_name: newPatient.last_name.trim(),
         phone,
       };
+      setSelectedFollowupSurgery(null);
       setSelectedPatient(patient);
       setSearch(`${patient.first_name} ${patient.last_name}`);
       setNewPatient({ first_name: "", last_name: "", phone: "" });
@@ -389,7 +390,7 @@ export default function NurseClient() {
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 font-sans">
       {/* انتخاب بیمار */}
       <div className="bg-white p-6 rounded-[2rem] shadow-sm space-y-4">
-        <section className="space-y-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
+        <section id="followups" className="space-y-3 rounded-2xl border border-amber-100 bg-amber-50/60 p-4">
           <div>
             <h2 className="font-black text-sm text-amber-950">بیماران پس از عمل بدون نوبت پیگیری</h2>
             <p className="mt-1 text-xs text-amber-800">عمل‌های گذشته‌ای که هنوز نوبت پرستاری برایشان ثبت نشده است.</p>
@@ -494,6 +495,7 @@ export default function NurseClient() {
                     key={patient.id}
                     type="button"
                     onClick={() => {
+                      setSelectedFollowupSurgery(null);
                       setSelectedPatient(patient);
                       setSearch(`${patient.first_name} ${patient.last_name}`);
                       setNewPatient({ first_name: "", last_name: "", phone: "" });
