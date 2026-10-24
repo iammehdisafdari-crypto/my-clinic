@@ -10,7 +10,7 @@ export default async function NursePage() {
       <div>
         <h1 className="text-2xl font-black">پنل پرستاری و علائم حیاتی</h1>
         <p className="text-sm text-gray-500 mt-1">
-          ثبت و بررسی علائم حیاتی و دستورات مراقبتی بیماران بستری یا پس از عمل.
+          ثبت نوبت‌های پیگیری پس از عمل، پیگیری حضور بیمار و ثبت علائم حیاتی.
         </p>
       </div>
       <NurseClient />
