@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
   const db = getDB();
   const url = new URL(request.url);
-  const query = normText(url.searchParams.get("q"));
+  const query = toEnDigits(normText(url.searchParams.get("q")));
   const pattern = `%${query}%`;
   const today = todayTehran();
 
@@ -66,6 +66,7 @@ export async function GET(request: Request) {
          WHERE f.type = 'consultation'
            AND f.related_surgery_appointment_id IS NOT NULL
            AND f.created_by = ?
+           AND f.status <> 'cancelled'
          ORDER BY f.appointment_date DESC, f.appointment_time DESC
          LIMIT 100`
       )
