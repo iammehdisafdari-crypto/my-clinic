@@ -50,7 +50,7 @@ export async function GET(request: Request) {
                 OR (p.first_name || ' ' || p.last_name) LIKE ?
                 OR CAST(p.daily_number AS TEXT) LIKE ?)
          ORDER BY s.appointment_date DESC, s.appointment_time DESC
-         LIMIT 300`
+         LIMIT 100`
       )
       .bind(today, query, pattern, pattern, pattern, pattern)
       .all(),
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
                 OR (p.first_name || ' ' || p.last_name) LIKE ?
                 OR CAST(p.daily_number AS TEXT) LIKE ? OR p.phone LIKE ?)
          ORDER BY f.appointment_date DESC, f.appointment_time DESC
-         LIMIT 300`
+         LIMIT 100`
       )
       .bind(user.uid, appointmentQuery, appointmentPattern, appointmentPattern, appointmentPattern, appointmentPattern, appointmentPattern)
       .all(),
