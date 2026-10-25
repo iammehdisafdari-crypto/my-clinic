@@ -66,7 +66,7 @@ const NURSE_SERVICES = [
   { id: "tampon", label: "تامپون" },
   { id: "examination_evening", label: "معاینه عصر" },
   { id: "examination_morning", label: "معاینه صبح" },
-  { id: "dissatisfaction", label: "ناراضی ها" },
+  { id: "dissatisfaction", label: "ناراضی‌ها" },
 ];
 
 export default function NurseClient() {
