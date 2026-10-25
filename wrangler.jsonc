@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-clinic-worker-preview",
+  "name": "my-clinic",
   "compatibility_date": "2026-10-25",
   "compatibility_flags": [
     "nodejs_compat"
