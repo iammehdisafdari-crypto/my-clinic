@@ -25,6 +25,7 @@ const ACTION_ROLES: Record<string, string[]> = {
   "appointments:write": ["admission", "scheduler", "visitor", "nurse"],
   "visits:refer": ["admission", "scheduler"],
   "visits:read": ["admission", "nurse", "scheduler"],
+  "vitals:write": ["nurse"],
   "visits:doctor": ["doctor"],
   "surgeries:write": ["admission", "surgery_tech", "scheduler"],
   "photos:write": ["photographer", "uploader"],
