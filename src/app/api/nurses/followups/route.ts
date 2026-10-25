@@ -25,9 +25,11 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const query = toEnDigits(normText(url.searchParams.get("q")));
   const pattern = `%${query}%`;
+  const appointmentQuery = toEnDigits(normText(url.searchParams.get("appointment_q")));
+  const appointmentPattern = `%${appointmentQuery}%`;
   const today = todayTehran();
 
-  const [candidateResult, appointmentResult] = await Promise.all([
+  const [candidateResult, appointmentResult, appointmentCountsResult] = await Promise.all([
     db
       .prepare(
         `SELECT s.id AS surgery_appointment_id, s.appointment_date AS surgery_date,
@@ -67,16 +69,30 @@ export async function GET(request: Request) {
            AND f.related_surgery_appointment_id IS NOT NULL
            AND f.created_by = ?
            AND f.status <> 'cancelled'
+           AND (? = '' OR p.first_name LIKE ? OR p.last_name LIKE ?
+                OR (p.first_name || ' ' || p.last_name) LIKE ?
+                OR CAST(p.daily_number AS TEXT) LIKE ? OR p.phone LIKE ?)
          ORDER BY f.appointment_date DESC, f.appointment_time DESC
-         LIMIT 100`
+         LIMIT 300`
       )
-      .bind(user.uid)
+      .bind(user.uid, appointmentQuery, appointmentPattern, appointmentPattern, appointmentPattern, appointmentPattern, appointmentPattern)
       .all(),
+    db.prepare(
+      `SELECT COUNT(*) AS booked,
+              COALESCE(SUM(CASE WHEN attendance_status = 'attended' THEN 1 ELSE 0 END), 0) AS attended,
+              COALESCE(SUM(CASE WHEN attendance_status = 'no_show' THEN 1 ELSE 0 END), 0) AS no_show
+       FROM appointments
+       WHERE type = 'consultation'
+         AND related_surgery_appointment_id IS NOT NULL
+         AND created_by = ?
+         AND status <> 'cancelled'`
+    ).bind(user.uid).first(),
   ]);
 
   return Response.json({
     candidates: candidateResult.results,
     appointments: appointmentResult.results,
+    counts: appointmentCountsResult,
   });
 }
 
@@ -180,25 +196,57 @@ export async function PATCH(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const appointmentId = Number(body.appointment_id);
-  const attendanceStatus = normText(body.attendance_status);
   if (!Number.isInteger(appointmentId) || appointmentId <= 0)
     return Response.json({ error: "نوبت نامعتبر است." }, { status: 400 });
-  if (!["pending", "attended", "no_show"].includes(attendanceStatus))
-    return Response.json({ error: "وضعیت مراجعه نامعتبر است." }, { status: 400 });
 
   const db = getDB();
   const canManageAny = ["manager", "admin", "doctor"].includes(user.role);
-  const query = `UPDATE appointments
-     SET attendance_status = ?,
-         status = CASE
-           WHEN ? = 'attended' THEN 'completed'
-           WHEN ? IN ('pending', 'no_show') AND status = 'completed' THEN 'pending'
-           ELSE status
-         END
-     WHERE id = ? AND type = 'consultation'
-       AND related_surgery_appointment_id IS NOT NULL
-       AND status <> 'cancelled'
-       ${canManageAny ? "" : "AND created_by = ?"}`;
+  const ownershipClause = canManageAny ? "" : "AND created_by = ?";
+  const ownerParam = canManageAny ? [] : [user.uid];
+
+  if (body.action === "edit") {
+    const appointmentDate = toEnDigits(normText(body.appointment_date));
+    const appointmentTime = toEnDigits(normText(body.appointment_time));
+    const serviceType = normText(body.service_type);
+    const serviceLabel = SERVICES[serviceType];
+    const notes = normText(body.notes).slice(0, 1000);
+
+    if (!serviceLabel)
+      return Response.json({ error: "نوع خدمت پرستاری نامعتبر است." }, { status: 400 });
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(appointmentDate))
+      return Response.json({ error: "تاریخ نوبت نامعتبر است." }, { status: 400 });
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointmentTime))
+      return Response.json({ error: "ساعت نوبت نامعتبر است (فرمت HH:MM)." }, { status: 400 });
+
+    const description = "[خدمت پرستاری: " + serviceLabel + "]" + (notes ? " " + notes : "");
+    try {
+      const result = await db.prepare(
+        "UPDATE appointments SET appointment_date = ?, appointment_time = ?, description = ? " +
+        "WHERE id = ? AND type = 'consultation' AND related_surgery_appointment_id IS NOT NULL " +
+        "AND status <> 'cancelled' " + ownershipClause
+      ).bind(appointmentDate, appointmentTime, description, appointmentId, ...ownerParam).run();
+
+      if (!result.meta.changes)
+        return Response.json({ error: "این نوبت پیدا نشد یا اجازهٔ ویرایش آن را ندارید." }, { status: 404 });
+      return Response.json({ ok: true, appointment_id: appointmentId });
+    } catch (cause) {
+      const details = cause instanceof Error ? cause.message : String(cause);
+      console.error("NURSE_FOLLOWUP_EDIT_FAILED", details);
+      if (/unique|constraint failed/i.test(details))
+        return Response.json({ error: "این ساعت برای نوبت دیگری رزرو شده است؛ ساعت دیگری انتخاب کنید." }, { status: 409 });
+      return Response.json({ error: "ویرایش نوبت پیگیری انجام نشد. دوباره تلاش کنید." }, { status: 500 });
+    }
+  }
+
+  const attendanceStatus = normText(body.attendance_status);
+  if (!["pending", "attended", "no_show"].includes(attendanceStatus))
+    return Response.json({ error: "وضعیت مراجعه نامعتبر است." }, { status: 400 });
+
+  const query = "UPDATE appointments SET attendance_status = ?, " +
+    "status = CASE WHEN ? = 'attended' THEN 'completed' " +
+    "WHEN ? IN ('pending', 'no_show') AND status = 'completed' THEN 'pending' ELSE status END " +
+    "WHERE id = ? AND type = 'consultation' AND related_surgery_appointment_id IS NOT NULL " +
+    "AND status <> 'cancelled' " + ownershipClause;
   const params = canManageAny
     ? [attendanceStatus, attendanceStatus, attendanceStatus, appointmentId]
     : [attendanceStatus, attendanceStatus, attendanceStatus, appointmentId, user.uid];
