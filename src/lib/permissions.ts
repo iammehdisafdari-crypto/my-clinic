@@ -12,6 +12,9 @@ export const HOME_BY_ROLE: Record<string, string> = {
   surgery_tech: "/dashboard/surgery",
   nurse: "/dashboard/nurse",
   photographer: "/dashboard/uploader",
+  // Legacy role names are still present on existing clinic accounts.
+  uploader: "/dashboard/uploader",
+  visitor: "/dashboard/patients",
   admission: "/dashboard/patients",
   accounting: "/dashboard/accounting",
 };
@@ -87,8 +90,9 @@ export async function requireRole(allowedRoles: string[]) {
     return session;
   }
   if (!allowedRoles.includes(session.role)) {
-    const home = HOME_BY_ROLE[session.role] || "/dashboard";
-    redirect(home);
+    const home = HOME_BY_ROLE[session.role];
+    // Unknown roles must stop at login rather than cycling through /dashboard.
+    redirect(home || "/login?error=unsupported-role");
   }
   return session;
 }

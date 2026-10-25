@@ -30,8 +30,14 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: "نام کاربری یا رمز عبور اشتباه است" }, { status: 401 });
     }
 
-    await createSession(user);
-    return Response.json({ success: true, role: user.role, home: HOME_BY_ROLE[user.role] || "/" });
+    const role = String(user.role || "").trim().toLowerCase();
+    const home = HOME_BY_ROLE[role];
+    if (!home) {
+      return Response.json({ success: false, error: "نقش این حساب کاربری در سامانه تعریف نشده است. با مدیر سامانه تماس بگیرید." }, { status: 403 });
+    }
+
+    await createSession({ ...user, role });
+    return Response.json({ success: true, role, home });
   } catch (err: any) {
     console.error("LOGIN_ERROR:", err);
     return Response.json({ success: false, error: "خطا در برقراری ارتباط", details: err?.message || String(err) }, { status: 500 });

@@ -9,6 +9,7 @@ export default async function Home() {
     redirect("/login");
   }
 
-  const dest = HOME_BY_ROLE[user.role] || "/dashboard/manager";
+  const dest = HOME_BY_ROLE[String(user.role || "").trim().toLowerCase()];
+  if (!dest) redirect("/login?error=unsupported-role");
   redirect(dest);
 }

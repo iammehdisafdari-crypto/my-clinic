@@ -61,7 +61,7 @@ export async function getSession(): Promise<SessionUser | null> {
           return {
             uid,
             id: uid,
-            role: String(row.role),
+            role: String(row.role || "").trim().toLowerCase(),
             name: fetchedName.includes("\u0000") || !fetchedName ? "مدیر سیستم" : fetchedName,
             username: String(row.username || ""),
           };
@@ -72,7 +72,7 @@ export async function getSession(): Promise<SessionUser | null> {
     return {
       uid,
       id: uid,
-      role: String(payload.role || "admin"),
+      role: String(payload.role || "admin").trim().toLowerCase(),
       name: cleanName,
       username: typeof payload.username === "string" ? payload.username : undefined,
     };
