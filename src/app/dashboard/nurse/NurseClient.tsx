@@ -110,6 +110,7 @@ export default function NurseClient() {
   const [bp, setBp] = useState("");
   const [hr, setHr] = useState("");
   const [temp, setTemp] = useState("");
+  const [vitalsNotes, setVitalsNotes] = useState("");
 
   const [msg, setMsg] = useState("");
   const [appointmentMessage, setAppointmentMessage] = useState<{ text: string; whatsappUrl: string; rubikaNotice?: string } | null>(null);
@@ -419,7 +420,7 @@ export default function NurseClient() {
           blood_pressure: bp,
           heart_rate: hr,
           temperature: temp,
-          notes,
+          notes: vitalsNotes,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -431,7 +432,7 @@ export default function NurseClient() {
       setBp("");
       setHr("");
       setTemp("");
-      setNotes("");
+      setVitalsNotes("");
       const historyResponse = await fetch(`/api/nurses/vitals?patient_id=${selectedPatient.id}`, { cache: "no-store" });
       if (historyResponse.ok) {
         setVitalsList(await historyResponse.json());
@@ -854,6 +855,13 @@ export default function NurseClient() {
                   onChange={(e) => setTemp(e.target.value)}
                 />
               </div>
+              <textarea
+                className={inputClass}
+                placeholder="یادداشت علائم حیاتی (اختیاری)"
+                rows={2}
+                value={vitalsNotes}
+                onChange={(event) => setVitalsNotes(event.target.value)}
+              />
               <button
                 type="submit"
                 disabled={loading}
