@@ -43,3 +43,7 @@ next-env.d.ts
 .dev.vars
 /dist/
 .vinext/
+# Temporary audit artifacts and backups
+.wrangler-test-audit/
+session-auth-diff.txt
+*.pre-*
