@@ -92,7 +92,7 @@ async function runLiveHttpTests() {
     });
     const dataPutOwn = await resPutOwn.json().catch(() => ({}));
     assert(
-      resPutOwn.status === 403 && resPutOwn.status === 403,
+      resPutOwn.status === 403,
       `Manager PUT on own account returns 403 Forbidden (got ${resPutOwn.status}: ${dataPutOwn.error})`
     );
 
@@ -102,7 +102,7 @@ async function runLiveHttpTests() {
     });
     const dataDelOwn = await resDelOwn.json().catch(() => ({}));
     assert(
-      resDelOwn.status === 403 && resDelOwn.status === 403,
+      resDelOwn.status === 403,
       `Manager DELETE on own account returns 403 Forbidden (got ${resDelOwn.status}: ${dataDelOwn.error})`
     );
   }
