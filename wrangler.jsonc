@@ -6,6 +6,9 @@
     "nodejs_compat"
   ],
   "main": "vinext/server/fetch-handler",
+  "build": {
+    "command": "npm run build"
+  },
   "assets": {
     "directory": "dist/client",
     "html_handling": "none",

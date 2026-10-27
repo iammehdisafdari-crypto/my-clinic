@@ -3,14 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "dev": "vite dev --port 3001",
+    "build": "vite build",
+    "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "next lint",
-    "dev:vinext": "vite dev --port 3001",
-    "build:vinext": "vite build",
-    "start:vinext": "wrangler dev --config dist/server/wrangler.json",
-    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json"
+    "test": "npx vite-node -c scripts/test.config.ts scripts/test-user-security.ts && npx vite-node -c scripts/test.config.ts scripts/test-remediation.ts",
+    "deploy": "wrangler deploy --config dist/server/wrangler.json"
   },
   "dependencies": {
     "@fontsource/vazirmatn": "^5.3.0",
