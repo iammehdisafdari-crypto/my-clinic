@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "./session";
 import type { SessionUser } from "./session";
+import { verifyOrigin } from "./security";
 
 export type Role = "admin" | "manager" | "doctor" | "surgery_tech" | "nurse" | "photographer" | "admission" | "accounting";
 
@@ -35,17 +36,21 @@ const ACTION_ROLES: Record<string, string[]> = {
   "photos:read": ["photographer", "uploader", "nurse"],
   "photos:delete": ["photographer", "uploader", "nurse"],
   "followups:write": ["nurse"],
-  "users:manage": ["doctor"],
+  "users:manage": [],
 };
 
 export function can(role: string, targetPath: string): boolean {
-  if (["admin", "manager", "doctor"].includes(role)) return true;
+  if (targetPath === "users:manage") {
+    return ["admin", "manager"].includes(role);
+  }
 
   const actionRoles = ACTION_ROLES[targetPath];
-  if (actionRoles) return actionRoles.includes(role);
+  if (actionRoles) {
+    return ["admin", "manager"].includes(role) || actionRoles.includes(role);
+  }
 
   if (targetPath.startsWith("/dashboard/manager") || targetPath.startsWith("/dashboard/users")) {
-    return role === "admin" || role === "manager";
+    return ["admin", "manager"].includes(role);
   }
   if (targetPath.startsWith("/dashboard/visits")) {
     return ["admin", "manager", "doctor", "admission", "nurse"].includes(role);
@@ -57,20 +62,29 @@ export function can(role: string, targetPath: string): boolean {
     return ["admin", "manager", "nurse", "doctor"].includes(role);
   }
   if (targetPath.startsWith("/dashboard/photo") || targetPath.startsWith("/dashboard/uploader")) {
-    return ["admin", "manager", "photographer"].includes(role);
+    return ["admin", "manager", "photographer", "uploader"].includes(role);
   }
   if (targetPath.startsWith("/dashboard/patients")) {
-    return ["admin", "manager", "admission", "nurse", "doctor"].includes(role);
+    return ["admin", "manager", "admission", "nurse", "doctor", "scheduler", "visitor"].includes(role);
   }
   if (targetPath.startsWith("/dashboard/accounting")) {
     return ["admin", "manager", "accounting"].includes(role);
   }
-  return true;
+
+  return false;
 }
 
 export async function guard(
-  action: string
+  action: string,
+  request?: Request
 ): Promise<{ user: SessionUser; error?: undefined } | { user?: undefined; error: Response }> {
+  if (request) {
+    const originCheck = verifyOrigin(request);
+    if (!originCheck.ok && originCheck.errorResponse) {
+      return { error: originCheck.errorResponse };
+    }
+  }
+
   const user = await getSession();
   if (!user) {
     return { error: Response.json({ error: "ابتدا وارد شوید" }, { status: 401 }) };

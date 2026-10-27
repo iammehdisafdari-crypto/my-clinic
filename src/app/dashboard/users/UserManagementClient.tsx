@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Trash2, Edit2, Check, X, KeyRound } from "lucide-react";
-import { canManageRole, ROLE_HIERARCHY, ROLE_LABELS } from "@/lib/roles";
+import { canManageRole, DB_ROLES, ROLE_LABELS } from "@/lib/roles";
 
 type UserItem = {
   id: number;
@@ -19,9 +19,9 @@ export default function UserManagementClient({
   initialUsers: UserItem[];
   currentUserRole: string;
 }) {
-  const assignableRoles = Object.entries(ROLE_LABELS).filter(([role]) =>
-    canManageRole(currentUserRole, role)
-  );
+  const assignableRoles = DB_ROLES
+    .filter((role) => canManageRole(currentUserRole, role))
+    .map((role) => [role, ROLE_LABELS[role] || role] as [string, string]);
 
   // فیلتر: کاربر فقط اعضای با سطح پایین‌تر از خود را مدیریت می‌کند
   const [users, setUsers] = useState<UserItem[]>(() => {
@@ -37,7 +37,12 @@ export default function UserManagementClient({
   });
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
-  const [newUser, setNewUser] = useState({ username: "", display_name: "", password: "", role: assignableRoles[0]?.[0] || "" });
+  const [newUser, setNewUser] = useState({
+    username: "",
+    display_name: "",
+    password: "",
+    role: assignableRoles[0]?.[0] || "",
+  });
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -46,7 +51,12 @@ export default function UserManagementClient({
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username: newUser.username.trim(), full_name: newUser.display_name.trim(), password: newUser.password, role: newUser.role }),
+      body: JSON.stringify({
+        username: newUser.username.trim(),
+        full_name: newUser.display_name.trim(),
+        password: newUser.password,
+        role: newUser.role,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setLoading(false);
@@ -55,7 +65,12 @@ export default function UserManagementClient({
       return;
     }
     setUsers((current) => [...current, data.user]);
-    setNewUser({ username: "", display_name: "", password: "", role: assignableRoles[0]?.[0] || "" });
+    setNewUser({
+      username: "",
+      display_name: "",
+      password: "",
+      role: assignableRoles[0]?.[0] || "",
+    });
     setMsg("کاربر با موفقیت ساخته شد.");
   }
 
@@ -70,6 +85,11 @@ export default function UserManagementClient({
   }
 
   async function handleUpdate(id: number) {
+    if (editForm.new_password && editForm.new_password.length < 8) {
+      setMsg("رمز عبور جدید باید حداقل ۸ کاراکتر باشد");
+      return;
+    }
+
     setLoading(true);
     setMsg("");
     const res = await fetch(`/api/users/${id}`, {
@@ -201,7 +221,8 @@ export default function UserManagementClient({
                             onChange={(e) =>
                               setEditForm({ ...editForm, new_password: e.target.value })
                             }
-                            placeholder="رمز جدید (اختیاری)"
+                            placeholder="رمز جدید (اختیاری - حداقل ۸ کاراکتر)"
+                            minLength={8}
                             className="w-full pl-6 pr-2 py-1 border border-dashed border-gray-300 rounded-lg text-xs font-mono bg-gray-50 text-gray-800 focus:outline-none focus:border-emerald-500 placeholder:font-sans placeholder:text-[11px]"
                             dir="ltr"
                           />
@@ -225,6 +246,11 @@ export default function UserManagementClient({
                         }
                         className="border border-gray-200 rounded-lg p-1.5 text-xs outline-none focus:border-brand-green"
                       >
+                        {!assignableRoles.some(([key]) => key === editForm.role) && (
+                          <option key={editForm.role} value={editForm.role}>
+                            {ROLE_LABELS[editForm.role] || editForm.role} (نقش فعلی)
+                          </option>
+                        )}
                         {assignableRoles.map(([key, label]) => (
                           <option key={key} value={key}>
                             {label}
@@ -292,4 +318,3 @@ export default function UserManagementClient({
     </div>
   );
 }
-

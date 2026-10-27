@@ -2,14 +2,19 @@
 import { verifyPassword } from "@/lib/crypto";
 import { createSession } from "@/lib/session";
 import { HOME_BY_ROLE } from "@/lib/permissions";
+import { verifyOrigin } from "@/lib/security";
 
 export const runtime = "edge";
 
 export async function POST(request: Request) {
+  const originCheck = verifyOrigin(request);
+  if (!originCheck.ok && originCheck.errorResponse) {
+    return originCheck.errorResponse;
+  }
+
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, any>;
-    
-    // استخراج نام کاربری یا ایمیل با تمامی نام‌های رایج فیلدها
+
     const rawUsername = body.username || body.email || body.identifier || body.user;
     const rawPassword = body.password || body.pass;
 
@@ -38,8 +43,11 @@ export async function POST(request: Request) {
 
     await createSession({ ...user, role });
     return Response.json({ success: true, role, home });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("LOGIN_ERROR:", err);
-    return Response.json({ success: false, error: "خطا در برقراری ارتباط", details: err?.message || String(err) }, { status: 500 });
+    return Response.json(
+      { success: false, error: "خطا در برقراری ارتباط" },
+      { status: 500 }
+    );
   }
 }
