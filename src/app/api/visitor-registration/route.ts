@@ -5,7 +5,7 @@ import { normText, toEnDigits } from "@/lib/normalize";
 export const runtime = "edge";
 
 function validDate(value: string) {
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + "T00:00:00Z");
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
@@ -22,8 +22,8 @@ export async function POST(request: Request) {
   const first_name = text("first_name");
   const last_name = text("last_name");
   const father_name = text("father_name") || null;
-  const phone = toEnDigits(String(b.phone ?? "")).replace(/\\D/g, "");
-  const national_id = toEnDigits(String(b.national_id ?? "")).replace(/\\D/g, "");
+  const phone = toEnDigits(String(b.phone ?? "")).replace(/\D/g, "");
+  const national_id = toEnDigits(String(b.national_id ?? "")).replace(/\D/g, "");
   const ageRaw = toEnDigits(String(b.age ?? "")).trim();
   const age = ageRaw ? Number(ageRaw) : null;
   const marital_status = text("marital_status") || null;
@@ -34,10 +34,10 @@ export async function POST(request: Request) {
   const appointment_time = toEnDigits(text("appointment_time"));
 
   if (!first_name || !last_name) return Response.json({ error: "نام و نام خانوادگی الزامی است" }, { status: 400 });
-  if (!/^09\\d{9}$/.test(phone)) return Response.json({ error: "شماره تماس باید ۱۱ رقم و با ۰۹ شروع شود" }, { status: 400 });
-  if (national_id && !/^\\d{10}$/.test(national_id)) return Response.json({ error: "کد ملی باید ۱۰ رقم باشد" }, { status: 400 });
+  if (!/^09\d{9}$/.test(phone)) return Response.json({ error: "شماره تماس باید ۱۱ رقم و با ۰۹ شروع شود" }, { status: 400 });
+  if (national_id && !/^\d{10}$/.test(national_id)) return Response.json({ error: "کد ملی باید ۱۰ رقم باشد" }, { status: 400 });
   if (age !== null && (!Number.isInteger(age) || age < 1 || age > 120)) return Response.json({ error: "سن معتبر نیست" }, { status: 400 });
-  if (!validDate(appointment_date) || !/^([01]\\d|2[0-3]):([0-5]\\d)$/.test(appointment_time)) {
+  if (!validDate(appointment_date) || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time)) {
     return Response.json({ error: "تاریخ و ساعت مراجعه معتبر نیست" }, { status: 400 });
   }
 
