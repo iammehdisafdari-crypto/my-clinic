@@ -21,6 +21,8 @@ type Patient = {
   created_at: string | null;
 };
 
+const VISITOR_TIME_SLOTS = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"];
+
 const EMPTY = {
   first_name: "",
   last_name: "",
@@ -46,12 +48,17 @@ function toEn(s: string) {
   canWrite,
   canRefer,
   initialQ,
+  isVisitor,
 }: {
   canWrite: boolean;
   canRefer: boolean;
   initialQ: string;
+  isVisitor: boolean;
 }) {
   const [form, setForm] = useState(EMPTY);
+  const [appointmentDate, setAppointmentDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }));
+  const [appointmentTime, setAppointmentTime] = useState("");
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
   const [msg, setMsg] = useState("");
   const [dupes, setDupes] = useState<Patient[]>([]);
   const [q, setQ] = useState(initialQ);
@@ -91,6 +98,16 @@ function toEn(s: string) {
     if (r.ok) setList(await r.json());
   }, []);
 
+  useEffect(() => {
+    if (!isVisitor || !appointmentDate) return;
+    let active = true;
+    fetch("/api/appointments?date=" + encodeURIComponent(appointmentDate) + "&type=consultation")
+      .then((response) => response.ok ? response.json() : [])
+      .then((rows: { appointment_time: string }[]) => { if (active) setBookedTimes(rows.map((row) => row.appointment_time)); })
+      .catch(() => { if (active) setBookedTimes([]); });
+    return () => { active = false; };
+  }, [appointmentDate, isVisitor]);
+
   // جستجو هنگام تایپ (با ۰.۳ ثانیه تاخیر)
   useEffect(() => {
     const t = setTimeout(() => load(q), 300);
@@ -99,6 +116,10 @@ function toEn(s: string) {
 
   async function save(force: boolean) {
     setMsg("");
+    if (isVisitor && (!appointmentDate || !appointmentTime)) {
+      setMsg("لطفاً تاریخ و ساعت مراجعه بیمار را انتخاب کنید.");
+      return;
+    }
 
     // اگر این شماره موبایل قبلاً ثبت شده، اول هشدار می‌دهیم
     if (!force) {
@@ -119,15 +140,18 @@ function toEn(s: string) {
     const r = await fetch("/api/patients", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ...(isVisitor ? { appointment_date: appointmentDate, appointment_time: appointmentTime } : {}) }),
     });
-    const data = (await r.json()) as { error?: string; patient?: { daily_number: number } };
+    const data = (await r.json()) as { error?: string; patient?: { daily_number: number }; appointment?: { appointment_date: string; appointment_time: string } };
     setSaving(false);
 
     if (r.ok && data.patient) {
       setForm(EMPTY);
       setDupes([]);
-      setMsg(`بیمار ثبت شد. شماره پرونده امروز: ${data.patient.daily_number}`);
+      setAppointmentTime("");
+      setMsg(isVisitor
+        ? `بیمار و نوبت مراجعه با موفقیت ثبت شدند. شماره پرونده امروز: ${data.patient.daily_number}`
+        : `بیمار ثبت شد. شماره پرونده امروز: ${data.patient.daily_number}`);
       load(q);
     } else {
       setMsg(data.error || "خطا");
@@ -167,6 +191,30 @@ function toEn(s: string) {
           <input className={input} placeholder="محدوده محل سکونت" {...f("residence_area")} />
           <input className={input} placeholder="نوع جراحی" {...f("surgery_type")} />
           <input className={input} placeholder="نحوه آشنایی" {...f("referral_source")} />
+          {isVisitor && (
+            <>
+              <div className="space-y-2">
+                <label htmlFor="visitor-appointment-date" className="block text-sm font-bold text-gray-700">تاریخ مراجعه بیمار *</label>
+                <input id="visitor-appointment-date" type="date" required value={appointmentDate} onChange={(e) => { setAppointmentDate(e.target.value); setAppointmentTime(""); }} className={input} />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <p className="text-sm font-bold text-gray-700">ساعت مراجعه بیمار *</p>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {VISITOR_TIME_SLOTS.map((time) => {
+                    const booked = bookedTimes.includes(time);
+                    const selected = appointmentTime === time;
+                    return (
+                      <button key={time} type="button" disabled={booked} onClick={() => setAppointmentTime(time)}
+                        className={`rounded-xl border p-2.5 text-sm font-mono font-bold transition-colors ${booked ? "cursor-not-allowed border-gray-100 bg-gray-100 text-gray-300 line-through" : selected ? "border-brand-green bg-brand-green text-white" : "border-gray-200 bg-white text-gray-700 hover:border-brand-green"}`}>
+                        {time}
+                      </button>
+                    );
+                  })}
+                </div>
+                {appointmentTime && <p className="text-xs text-gray-500">زمان انتخاب‌شده: {appointmentTime}</p>}
+              </div>
+            </>
+          )}
           <textarea className={input + " md:col-span-3"} rows={2} placeholder="توضیحات" {...f("notes")} />
 
           {dupes.length > 0 && (
