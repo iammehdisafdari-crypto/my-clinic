@@ -42,9 +42,10 @@ function JalaliDateField({ value, onChange, minDate }: { value: string; onChange
   const days = jalaaliMonthLength(parts.jy, parts.jm);
   function update(next: { jy: number; jm: number; jd: number }) {
     const safe = { ...next, jd: Math.min(next.jd, jalaaliMonthLength(next.jy, next.jm)) };
-    setParts(safe);
     const iso = jalaliToIso(safe.jy, safe.jm, safe.jd);
-    if (!minDate || iso >= minDate) onChange(iso);
+    if (minDate && iso < minDate) return;
+    setParts(safe);
+    onChange(iso);
   }
   const selectClass = input + " min-w-0";
   return <div className="grid grid-cols-3 gap-2" dir="rtl">
