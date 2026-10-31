@@ -118,7 +118,7 @@ export async function PUT(request: Request) {
     const result = await getDB().prepare(
       `UPDATE appointments
        SET appointment_date = ?, appointment_time = ?
-       WHERE id = ? AND created_by = ? AND type = 'consultation' AND status = 'pending'`
+       WHERE id = ? AND created_by = ? AND type = 'consultation' AND status IN ('pending', 'confirmed')`
     ).bind(appointment_date, appointment_time, id, user.uid).run();
     if (!result.meta.changes) {
       return Response.json({ error: "نوبت پیدا نشد یا امکان ویرایش آن وجود ندارد" }, { status: 404 });
