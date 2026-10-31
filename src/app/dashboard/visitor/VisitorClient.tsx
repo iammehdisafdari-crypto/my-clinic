@@ -111,7 +111,7 @@ export default function VisitorClient() {
       }
       setMsg(`نوبت مشاوره برای ${selectedPatient.first_name} ${selectedPatient.last_name} در تاریخ ${date} ساعت ${selectedTime} ثبت شد.`);
       setSelectedTime("");
-      setBookedTimes((prev) => [...prev, date === new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }) ? selectedTime : selectedTime]);
+      setBookedTimes((prev) => [...prev, selectedTime]);
     } catch {
       setMsg("ارتباط با سرور برقرار نشد. وضعیت نوبت را بررسی کنید.");
     } finally {
@@ -211,7 +211,7 @@ export default function VisitorClient() {
             <button type="button" onClick={() => setSelectedPatient(null)} className="text-xs text-red-600 underline">تغییر</button>
           </div>
         ) : (
-          <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-xl">برای رزرو نوبت، ابتدا یک پرونده از فهرست سمت راست/بالا انتخاب کنید.</p>
+          <p className="text-sm text-amber-700 bg-amber-50 p-3 rounded-xl">برای رزرو نوبت، ابتدا یک پرونده از فهرست پرونده‌های ثبت‌شده انتخاب کنید.</p>
         )}
         <div className="space-y-2">
           <label className="text-sm font-bold text-gray-700">تاریخ مشاوره</label>
