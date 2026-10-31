@@ -25,8 +25,8 @@ export async function GET(request: Request) {
   if (q) {
     values.push("%" + toEnDigits(q) + "%");
     const p = "?" + values.length;
-    clauses.push("(first_name || ' ' || last_name) LIKE " + p +
-      " OR (last_name || ' ' || first_name) LIKE " + p + " OR phone LIKE " + p);
+    clauses.push("((first_name || ' ' || last_name) LIKE " + p +
+      " OR (last_name || ' ' || first_name) LIKE " + p + " OR phone LIKE " + p + ")");
   }
 
   const where = clauses.length ? "WHERE " + clauses.join(" AND ") : "";

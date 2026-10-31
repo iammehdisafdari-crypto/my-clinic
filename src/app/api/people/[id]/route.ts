@@ -29,12 +29,19 @@ export async function GET(_request: Request, context: Context) {
     "WHERE person_id = ? ORDER BY id DESC LIMIT 100"
   ).bind(id).all();
 
+  const { results: appointmentEvents } = await db.prepare(
+    "SELECT e.id, e.appointment_id, e.event_type, e.old_date, e.old_time, e.new_date, e.new_time, " +
+    "e.old_status, e.new_status, e.old_attendance_status, e.new_attendance_status, e.reason, e.performed_by, e.created_at " +
+    "FROM appointment_events e JOIN appointments a ON a.id = e.appointment_id " +
+    "WHERE a.patient_id = ? ORDER BY e.id DESC LIMIT 200"
+  ).bind(id).all();
+
   const patientRecord = await db.prepare(
     "SELECT id, created_at FROM patient_records WHERE patient_id = ?"
   ).bind(id).first();
 
   return Response.json({
-    person, appointments, events, has_patient_record: Boolean(patientRecord),
+    person, appointments, events, appointment_events: appointmentEvents, has_patient_record: Boolean(patientRecord),
     patient_record_created_at: patientRecord?.created_at ?? null
   });
 }

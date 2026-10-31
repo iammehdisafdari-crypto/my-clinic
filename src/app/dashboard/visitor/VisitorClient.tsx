@@ -25,6 +25,15 @@ type Appointment = {
   first_name: string;
   last_name: string;
 };
+type AppointmentEvent = {
+  id: number;
+  event_type: string;
+  old_date: string | null;
+  old_time: string | null;
+  new_date: string | null;
+  new_time: string | null;
+  reason: string | null;
+};
 const TIME_SLOTS = [
   "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
   "14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"
@@ -52,6 +61,7 @@ export default function VisitorClient() {
   const [loading, setLoading] = useState(false);
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
   const [history, setHistory] = useState<Appointment[]>([]);
+  const [historyEvents, setHistoryEvents] = useState<AppointmentEvent[]>([]);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ first_name: "", last_name: "", phone: "", age: "", surgery_type: "", referral_source: "", notes: "" });
   const [rescheduleId, setRescheduleId] = useState<number | null>(null);
@@ -86,12 +96,16 @@ export default function VisitorClient() {
   useEffect(() => {
     if (!selectedPerson) {
       setHistory([]);
+      setHistoryEvents([]);
       setEditing(false);
       return;
     }
     fetch("/api/people/" + selectedPerson.id)
       .then((response) => response.ok ? response.json() : null)
-      .then((data) => setHistory(data?.appointments ?? []))
+      .then((data) => {
+        setHistory(data?.appointments ?? []);
+        setHistoryEvents(data?.appointment_events ?? []);
+      })
       .catch(() => setHistory([]));
     setEditForm({
       first_name: selectedPerson.first_name,
@@ -174,7 +188,11 @@ export default function VisitorClient() {
     await Promise.all([loadMine(), loadBooked()]);
     if (selectedPerson) {
       const profile = await fetch("/api/people/" + selectedPerson.id);
-      if (profile.ok) setHistory((await profile.json()).appointments ?? []);
+      if (profile.ok) {
+        const data = await profile.json();
+        setHistory(data.appointments ?? []);
+        setHistoryEvents(data.appointment_events ?? []);
+      }
     }
   }
 
@@ -324,6 +342,16 @@ export default function VisitorClient() {
                   <span>{statusLabel(appointment)}</span>
                 </div>
               ))}
+              {historyEvents.slice(0, 8).map((event) => (
+                <div key={event.id} className="text-[11px] text-gray-500 border-r-2 border-emerald-200 pr-2 py-1">
+                  {event.event_type === "rescheduled"
+                    ? "تغییر زمان: " + (event.old_date || "—") + " " + (event.old_time || "") + " ← " + (event.new_date || "—") + " " + (event.new_time || "")
+                    : event.event_type === "status_changed" ? "تغییر وضعیت نوبت" :
+                      event.event_type === "attendance_changed" ? "ثبت وضعیت مراجعه" :
+                        event.event_type === "created" ? "ثبت نوبت" : "رویداد نوبت"}
+                  {event.reason ? " · " + event.reason : ""}
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -352,6 +380,7 @@ export default function VisitorClient() {
                   <button type="button" onClick={() => updateAppointment(appointment.id, "confirm")} className="text-xs rounded-lg bg-emerald-50 text-emerald-800 px-3 py-2">تأیید</button>
                   <button type="button" onClick={() => updateAppointment(appointment.id, "cancel", { reason: "لغو توسط ویزیتور" })} className="text-xs rounded-lg bg-red-50 text-red-700 px-3 py-2">لغو</button>
                   <button type="button" onClick={() => updateAppointment(appointment.id, "no_show", { reason: "عدم مراجعه" })} className="text-xs rounded-lg bg-amber-50 text-amber-800 px-3 py-2">عدم مراجعه</button>
+                  <button type="button" onClick={() => updateAppointment(appointment.id, "attended", { reason: "مراجعه انجام شد" })} className="text-xs rounded-lg bg-blue-50 text-blue-800 px-3 py-2">مراجعه انجام شد</button>
                   <button type="button" onClick={() => { setRescheduleId(rescheduleId === appointment.id ? null : appointment.id); setRescheduleDate(appointment.appointment_date); setRescheduleTime(appointment.appointment_time); }} className="text-xs rounded-lg border px-3 py-2">تغییر زمان</button>
                 </div>
               )}

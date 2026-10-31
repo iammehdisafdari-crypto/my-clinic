@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       values.push(legacyNationalId);
     }
     const placeholders = values.map((_, index) => "?" + (index + 1));
-    placeholders[0] = "(SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1)";
+    placeholders[0] = "(SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1 AND daily_number > 0)";
     const res = await db.prepare(
       "INSERT INTO patients (" + columns.join(", ") + ") VALUES (" + placeholders.join(", ") + ")"
     ).bind(...values).run();
