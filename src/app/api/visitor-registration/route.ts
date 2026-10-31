@@ -52,11 +52,15 @@ export async function POST(request: Request) {
     if (!columnNames.has("surgeon_name")) {
       await db.prepare("ALTER TABLE patients ADD COLUMN surgeon_name TEXT").run();
     }
-    info = await db.prepare("PRAGMA table_info(patients)").all<{ name: string }>();
+    info = await db.prepare("PRAGMA table_info(patients)").all<{ name: string; notnull: number }>();
     columnNames = new Set((info.results ?? []).map((column) => column.name));
     if (!columnNames.has("national_id") || !columnNames.has("surgeon_name")) {
       return Response.json({ error: "ساختار دیتابیس برای ثبت اطلاعات جدید آماده نیست" }, { status: 500 });
     }
+    // دیتابیس قدیمی ممکن است national_id را اجباری تعریف کرده باشد؛
+    // در این حالت برای ورودی خالی فقط مقدار سازگاری داخلی ذخیره می‌شود.
+    const nationalIdColumn = (info.results ?? []).find((column) => column.name === "national_id");
+    const storedNationalId = national_id || (nationalIdColumn?.notnull ? `LEGACY-${crypto.randomUUID()}` : null);
 
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
     const patientColumns = [
@@ -66,7 +70,7 @@ export async function POST(request: Request) {
     ];
     const patientValues = [
       today, today, first_name, last_name, phone, father_name, age, marital_status,
-      referral_source, surgery_type, surgeon_name, national_id || null, user.uid
+      referral_source, surgery_type, surgeon_name, storedNationalId, user.uid
     ];
     const placeholders = [
       "(SELECT COALESCE(MAX(daily_number), 0) + 1 FROM patients WHERE admission_date = ?1)",
