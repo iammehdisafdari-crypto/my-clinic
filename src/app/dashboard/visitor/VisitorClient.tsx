@@ -24,7 +24,7 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
   const [notes, setNotes] = useState("");
   const [appointmentDate, setAppointmentDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }));
   const [appointmentTime, setAppointmentTime] = useState("");
-  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
+  const [registrationBookedTimes, setRegistrationBookedTimes] = useState<string[]>([]);
   
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -45,7 +45,7 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
       const res = await fetch(`/api/appointments?date=${appointmentDate}&type=consultation`);
       if (res.ok) {
         const data = await res.json();
-        setBookedTimes(data.map((item: any) => item.appointment_time).filter(Boolean));
+        setRegistrationBookedTimes(data.map((item: any) => item.appointment_time).filter(Boolean));
       }
     };
     fetchBookedTimes();
@@ -117,7 +117,7 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
           setMsg(`بیمار ثبت شد (پرونده ${data.patient.daily_number}) اما نوبت ثبت نشد: ${appointmentData.error || "خطا در ثبت نوبت"}`);
           return;
         }
-        setBookedTimes((prev) => [...prev, appointmentTime]);
+        setRegistrationBookedTimes((prev) => [...prev, appointmentTime]);
       }
       setMsg(isVisitor
         ? `بیمار و نوبت مشاوره با موفقیت ثبت شدند. شماره پرونده: ${data.patient.daily_number} | ${appointmentDate} ساعت ${appointmentTime}`
@@ -200,13 +200,13 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
                 <select className={inputClass} value={appointmentTime} onChange={(e) => setAppointmentTime(e.target.value)} required>
                   <option value="">انتخاب ساعت</option>
                   {["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"].map((time) => (
-                    <option key={time} value={time} disabled={bookedTimes.includes(time)}>{time}{bookedTimes.includes(time) ? " (رزرو شده)" : ""}</option>
+                    <option key={time} value={time} disabled={registrationBookedTimes.includes(time)}>{time}{registrationBookedTimes.includes(time) ? " (رزرو شده)" : ""}</option>
                   ))}
                 </select>
               </div>
             </div>
           )}
-          <button disabled={loading || (isVisitor && (!appointmentDate || !appointmentTime || bookedTimes.includes(appointmentTime)))} className="w-full bg-brand-green text-white font-bold p-3 rounded-xl transition-transform active:scale-95">
+          <button disabled={loading || (isVisitor && (!appointmentDate || !appointmentTime || registrationBookedTimes.includes(appointmentTime)))} className="w-full bg-brand-green text-white font-bold p-3 rounded-xl transition-transform active:scale-95">
             {loading ? "در حال ثبت..." : isVisitor ? "ثبت بیمار و نوبت مشاوره" : "ثبت و انتخاب برای نوبت‌دهی"}
           </button>
         </form>
