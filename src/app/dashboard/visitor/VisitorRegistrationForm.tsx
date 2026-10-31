@@ -145,7 +145,7 @@ export default function VisitorRegistrationForm() {
             </label>
             <label className="space-y-1.5 text-sm font-bold">وضعیت تأهل
               <select className={input} value={form.marital_status} onChange={e => change("marital_status",e.target.value)}>
-                <option value="">انتخاب کنید</option><option value="single">مجرد</option><option value="married">متأهل</option><option value="other">سایر</option>
+                <option value="">انتخاب کنید</option><option value="مجرد">مجرد</option><option value="متأهل">متأهل</option><option value="سایر">سایر</option>
               </select>
             </label>
             <label className="space-y-1.5 text-sm font-bold">نام معرف
