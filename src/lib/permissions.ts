@@ -14,7 +14,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
   photographer: "/dashboard/uploader",
   // Legacy role names are still present on existing clinic accounts.
   uploader: "/dashboard/uploader",
-  visitor: "/dashboard/patients",
+  visitor: "/dashboard/visitor",
   admission: "/dashboard/patients",
   accounting: "/dashboard/accounting",
 };
