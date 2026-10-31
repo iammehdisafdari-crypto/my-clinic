@@ -93,3 +93,36 @@ export async function POST(request: Request) {
     return Response.json({ error: "این ساعت قبلاً رزرو شده است. لطفاً زمان دیگری انتخاب کنید." }, { status: 409 });
   }
 }
+ 
+// تغییر تاریخ و ساعت مراجعه توسط همان ویزیتوری که نوبت را ثبت کرده است.
+export async function PUT(request: Request) {
+  const { user, error } = await guard("appointments:write");
+  if (error) return error;
+  if (user.role !== "visitor") {
+    return Response.json({ error: "تغییر نوبت از این مسیر فقط برای ویزیتور مجاز است" }, { status: 403 });
+  }
+
+  const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = Number(b.id);
+  const appointment_date = toEnDigits(normText(b.appointment_date));
+  const appointment_time = toEnDigits(normText(b.appointment_time));
+  if (!Number.isInteger(id) || id <= 0 ||
+      !/^\\d{4}-\\d{2}-\\d{2}$/.test(appointment_date) ||
+      !/^([01]\\d|2[0-3]):([0-5]\\d)$/.test(appointment_time)) {
+    return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست" }, { status: 400 });
+  }
+
+  try {
+    const result = await getDB().prepare(
+      `UPDATE appointments
+       SET appointment_date = ?, appointment_time = ?
+       WHERE id = ? AND created_by = ? AND type = 'consultation' AND status = 'pending'`
+    ).bind(appointment_date, appointment_time, id, user.uid).run();
+    if (!result.meta.changes) {
+      return Response.json({ error: "نوبت پیدا نشد یا امکان ویرایش آن وجود ندارد" }, { status: 404 });
+    }
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ error: "این ساعت قبلاً رزرو شده است. زمان دیگری انتخاب کنید." }, { status: 409 });
+  }
+}
