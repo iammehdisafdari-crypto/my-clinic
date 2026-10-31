@@ -188,7 +188,7 @@ export default function VisitorRegistrationForm() {
                 <p className="mt-1 text-sm text-gray-500" dir="ltr">{item.phone}</p>
                 <p className="mt-1 text-sm text-gray-600">{item.appointment_date} — {item.appointment_time}</p>
               </div>
-              {item.status === "pending" && <button type="button" onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50">تغییر تاریخ و ساعت</button>}
+              {(item.status === "pending" || item.status === "confirmed") && <button type="button" onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50">تغییر تاریخ و ساعت</button>}
             </div>
           ))}
           {appointments.length === 0 && <p className="py-6 text-center text-sm text-gray-400">هنوز مراجعه‌ای ثبت نشده است.</p>}
