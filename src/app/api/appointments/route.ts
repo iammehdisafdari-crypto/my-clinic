@@ -93,3 +93,33 @@ export async function POST(request: Request) {
     return Response.json({ error: "این ساعت قبلاً رزرو شده است. لطفاً زمان دیگری انتخاب کنید." }, { status: 409 });
   }
 }
+
+
+// تغییر تاریخ و ساعت مراجعه فقط توسط ویزیتوری که نوبت را ثبت کرده است.
+export async function PUT(request: Request) {
+  const { user, error } = await guard("appointments:write", request);
+  if (error) return error;
+  if (user.role !== "visitor") return Response.json({ error: "این عملیات فقط برای ویزیتور مجاز است." }, { status: 403 });
+
+  const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = Number(b.id);
+  const appointment_date = toEnDigits(normText(b.appointment_date));
+  const appointment_time = toEnDigits(normText(b.appointment_time));
+  const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const allowedTimes = new Set(["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"]);
+  const validDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(appointment_date) && !Number.isNaN(new Date(appointment_date + "T00:00:00.000Z").getTime()) && new Date(appointment_date + "T00:00:00.000Z").toISOString().slice(0,10) === appointment_date;
+  if (!Number.isInteger(id) || id <= 0 || !validDate || appointment_date < todayTehran || !allowedTimes.has(appointment_time)) {
+    return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست." }, { status: 400 });
+  }
+
+  try {
+    const result = await getDB().prepare(
+      `UPDATE appointments SET appointment_date = ?, appointment_time = ?
+       WHERE id = ? AND created_by = ? AND type = 'consultation' AND status IN ('pending', 'confirmed')`
+    ).bind(appointment_date, appointment_time, id, user.uid).run();
+    if (!result.meta.changes) return Response.json({ error: "نوبت پیدا نشد یا امکان ویرایش آن وجود ندارد." }, { status: 404 });
+    return Response.json({ ok: true });
+  } catch {
+    return Response.json({ error: "این ساعت قبلاً رزرو شده است. زمان دیگری انتخاب کنید." }, { status: 409 });
+  }
+}
