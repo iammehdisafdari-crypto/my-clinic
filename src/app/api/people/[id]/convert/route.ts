@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { verifyMutationOrigin } from "@/lib/request-security";
 
 export const runtime = "edge";
 function todayTehran() {
@@ -7,10 +8,12 @@ function todayTehran() {
 }
 type Context = { params: Promise<{ id: string }> };
 
-export async function POST(_request: Request, context: Context) {
+export async function POST(request: Request, context: Context) {
+  const originError = verifyMutationOrigin(request);
+  if (originError) return originError;
   const { user, error } = await guard("patients:write");
   if (error) return error;
-  const allowed = ["admin", "manager", "doctor", "admission", "scheduler"];
+  const allowed = ["admin", "manager", "admission", "scheduler"];
   if (!allowed.includes(user.role)) {
     return Response.json({ error: "برای تشکیل پرونده پزشکی دسترسی پذیرش لازم است." }, { status: 403 });
   }

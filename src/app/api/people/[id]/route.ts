@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
 export const runtime = "edge";
@@ -52,6 +53,8 @@ export async function GET(_request: Request, context: Context) {
 }
 
 export async function PATCH(request: Request, context: Context) {
+  const originError = verifyMutationOrigin(request);
+  if (originError) return originError;
   const { user, error } = await guard("patients:write");
   if (error) return error;
   const id = Number((await context.params).id);

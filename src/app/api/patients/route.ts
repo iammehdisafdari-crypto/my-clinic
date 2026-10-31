@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
 export const runtime = "edge";
@@ -32,6 +33,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const originError = verifyMutationOrigin(request);
+  if (originError) return originError;
   const { user, error } = await guard("patients:create");
   if (error) return error;
   const b = (await request.json()) as Record<string, unknown>;

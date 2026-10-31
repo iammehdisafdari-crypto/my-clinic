@@ -1,11 +1,14 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
 export const runtime = "edge";
 type Context = { params: Promise<{ id: string }> };
 
 export async function PATCH(request: Request, context: Context) {
+  const originError = verifyMutationOrigin(request);
+  if (originError) return originError;
   const { user, error } = await guard("appointments:write");
   if (error) return error;
   const id = Number((await context.params).id);
