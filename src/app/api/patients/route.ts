@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { guardPatientRead } from "@/lib/guard-patient-read";
 import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
@@ -11,7 +12,7 @@ const COLS =
   "id, daily_number, admission_date, first_name, last_name, phone, landline, father_name, age, job, marital_status, residence_area, surgery_type, referral_source, notes, created_at";
 
 export async function GET(request: Request) {
-  const { error } = await guard("patients:read");
+  const { error } = await guardPatientRead();
   if (error) return error;
   const q = normText(new URL(request.url).searchParams.get("q")).replace(/[%_]/g, "");
   const db = getDB();

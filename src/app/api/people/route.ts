@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { guardPatientRead } from "@/lib/guard-patient-read";
 import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
@@ -10,7 +11,7 @@ function todayTehran() {
 }
 
 export async function GET(request: Request) {
-  const { user, error } = await guard("patients:read");
+  const { user, error } = await guardPatientRead();
   if (error) return error;
 
   const params = new URL(request.url).searchParams;

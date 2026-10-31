@@ -1,12 +1,13 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { guardPatientRead } from "@/lib/guard-patient-read";
 import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
 export const runtime = "edge";
 
 export async function GET(request: Request) {
-  const { user, error } = await guard("patients:read");
+  const { user, error } = await guardPatientRead();
   if (error) return error;
   const url = new URL(request.url);
   const personId = Number(url.searchParams.get("person_id") || url.searchParams.get("patient_id"));

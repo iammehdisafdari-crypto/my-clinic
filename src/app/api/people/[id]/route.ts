@@ -1,5 +1,6 @@
 import { getDB } from "@/lib/db";
 import { guard } from "@/lib/permissions";
+import { guardPatientRead } from "@/lib/guard-patient-read";
 import { verifyMutationOrigin } from "@/lib/request-security";
 import { normText, toEnDigits } from "@/lib/normalize";
 
@@ -7,7 +8,7 @@ export const runtime = "edge";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  const { user, error } = await guard("patients:read");
+  const { user, error } = await guardPatientRead();
   if (error) return error;
   const id = Number((await context.params).id);
   if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "شناسه شخص نامعتبر است" }, { status: 400 });
