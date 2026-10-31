@@ -19,7 +19,7 @@ function isRealDate(value: string) {
 export async function POST(request: Request) {
   const { user, error } = await guard("patients:create", request);
   if (error) return error;
-  if (!["visitor", "admin", "manager"].includes(user.role)) {
+  if (user.role !== "visitor") {
     return Response.json({ error: "این عملیات فقط در دسترس نقش ویزیتور است." }, { status: 403 });
   }
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       "referral_source", "notes", "created_by",
     ];
     const values: unknown[] = [
-      appointment_date, appointment_date, first_name, last_name, phone, null,
+      new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }), new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }), first_name, last_name, phone, null,
       null, null, null, null, null, normText(b.surgery_type) || null,
       null, normText(b.notes) || null, user.uid,
     ];
