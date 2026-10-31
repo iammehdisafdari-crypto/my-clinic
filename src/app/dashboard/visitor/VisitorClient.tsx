@@ -96,7 +96,6 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
     });
 
     const data = await res.json();
-    setLoading(false);
 
     if (res.ok && data.patient) {
       if (isVisitor) {
@@ -119,6 +118,7 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
         }
         setRegistrationBookedTimes((prev) => [...prev, appointmentTime]);
       }
+      setLoading(false);
       setMsg(isVisitor
         ? `بیمار و نوبت مشاوره با موفقیت ثبت شدند. شماره پرونده: ${data.patient.daily_number} | ${appointmentDate} ساعت ${appointmentTime}`
         : `بیمار با موفقیت ثبت شد. شماره پرونده: ${data.patient.daily_number}`);
@@ -136,6 +136,7 @@ export default function VisitorClient({ isVisitor = false }: { isVisitor?: boole
       setNotes("");
       if (isVisitor) setAppointmentTime("");
     } else {
+      setLoading(false);
       setMsg(data.error || "خطا در ثبت بیمار");
     }
   }
