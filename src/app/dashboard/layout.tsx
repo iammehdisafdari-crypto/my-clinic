@@ -25,7 +25,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const allLinks: (NavLink & { show: boolean })[] = [
     { href: HOME_BY_ROLE[user.role] || "/dashboard", label: "صفحه اصلی", icon: "home", show: true },
     { href: "/dashboard/nurse#followups", label: "پیگیری‌های پس از عمل", icon: "visits", show: user.role === "nurse" || user.role === "manager" || user.role === "doctor" || user.role === "admin" },
-    { href: "/dashboard/patients", label: "بیماران", icon: "patients", show: can(user.role, "patients:read") },
+    { href: "/dashboard/patients", label: "بیماران", icon: "patients", show: can(user.role, "patients:read") && user.role !== "visitor" },
     { href: "/dashboard/visits", label: "ویزیت‌ها", icon: "visits", show: can(user.role, "visits:read") },
     { href: "/dashboard/scheduler/surgeries", label: "تقویم اتاق عمل", icon: "visits", show: user.role === "scheduler" || user.role === "manager" || user.role === "doctor" },
     { href: "/dashboard/uploader", label: "پنل عکاسی", icon: "patients", show: can(user.role, "photos:write") },
@@ -54,7 +54,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       user={{ name: user.name, roleLabel: ROLE_LABELS[user.role] || user.role }}
       links={uniqueLinks}
       dateFa={dateFa}
-      showSearch={can(user.role, "patients:read")}
+      showSearch={can(user.role, "patients:read") && user.role !== "visitor"}
       logout={
         <div className="grid grid-cols-2 gap-2 w-full">
           <ChangePasswordModal />
