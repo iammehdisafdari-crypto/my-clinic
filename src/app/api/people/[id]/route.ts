@@ -43,8 +43,9 @@ export async function GET(_request: Request, context: Context) {
     "SELECT id, created_at FROM patient_records WHERE patient_id = ?"
   ).bind(id).first();
 
+  const { created_by: profileCreator, ...safePerson } = person as Record<string, unknown>;
   return Response.json({
-    person: { ...person, can_edit: Number((person as { created_by?: number }).created_by) === Number(user.uid) },
+    person: { ...safePerson, can_edit: Number(profileCreator) === Number(user.uid) },
     appointments, events, appointment_events: appointmentEvents, has_patient_record: Boolean(patientRecord),
     patient_record_created_at: patientRecord?.created_at ?? null
   });

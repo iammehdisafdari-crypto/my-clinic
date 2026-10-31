@@ -18,9 +18,10 @@ export async function GET(request: Request) {
     const { results } = await db.prepare(
       "SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.status, a.attendance_status, " +
       "a.type, a.description, a.created_at, p.first_name, p.last_name, p.phone " +
-      "FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.patient_id = ? " +
-      "ORDER BY a.appointment_date DESC, a.appointment_time DESC LIMIT 100"
-    ).bind(personId).all();
+      "FROM appointments a JOIN patients p ON p.id = a.patient_id WHERE a.patient_id = ?" +
+      (user.role === "visitor" ? " AND a.created_by = ?" : "") +
+      " ORDER BY a.appointment_date DESC, a.appointment_time DESC LIMIT 100"
+    ).bind(...(user.role === "visitor" ? [personId, user.uid] : [personId])).all();
     return Response.json(results);
   }
 
