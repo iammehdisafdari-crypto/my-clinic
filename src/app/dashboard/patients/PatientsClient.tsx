@@ -148,6 +148,7 @@ function toEn(s: string) {
     if (r.ok && data.patient) {
       setForm(EMPTY);
       setDupes([]);
+      if (isVisitor) setBookedTimes((current) => [...current, appointmentTime]);
       setAppointmentTime("");
       setMsg(isVisitor
         ? `بیمار و نوبت مراجعه با موفقیت ثبت شدند. شماره پرونده امروز: ${data.patient.daily_number}`
