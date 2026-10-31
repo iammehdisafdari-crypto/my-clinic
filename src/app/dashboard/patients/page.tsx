@@ -7,7 +7,7 @@ export const runtime = "edge";
 export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader", "photographer", "admission"]);
   const { q } = await searchParams;
-  const canConvert = ["admin", "manager", "doctor", "admission", "scheduler"].includes(user.role);
+  const canConvert = ["admin", "manager", "admission", "scheduler"].includes(user.role);
 
   return (
     <div className="space-y-6">
