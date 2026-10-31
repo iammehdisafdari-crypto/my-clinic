@@ -1,0 +1,29 @@
+﻿{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "my-clinic-local-audit",
+  "compatibility_date": "2026-10-25",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "dist/server/index.js",
+  "vars": {
+    "JWT_SECRET": "clinic_test_super_secret_jwt_key_2026_32char"
+  },
+  "assets": {
+    "directory": "dist/client",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/*",
+      "!/_next/static/*",
+      "!/*/_next/static/*"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "clinic-db-test",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

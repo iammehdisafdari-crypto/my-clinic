@@ -1,4 +1,4 @@
-﻿import { getRequestContext } from "@cloudflare/next-on-pages";
+import { env as workerEnv } from "cloudflare:workers";
 
 export type Env = {
   DB: any;
@@ -13,17 +13,12 @@ export type Env = {
 };
 
 export function getEnv(): Env {
-  try {
-    const ctx = getRequestContext();
-    if (ctx && ctx.env) {
-      return ctx.env as unknown as Env;
-    }
-  } catch {}
-
+  const runtimeEnv = workerEnv as unknown as Partial<Env>;
   return {
-    DB: (globalThis as any)?.__D1_BETA__ || (globalThis as any)?.DB || (process.env as any)?.DB,
-    JWT_SECRET: process.env.JWT_SECRET || "",
-    SESSION_SECRET: process.env.SESSION_SECRET || "",
+    ...runtimeEnv,
+    DB: runtimeEnv.DB || (process.env as any)?.DB,
+    JWT_SECRET: runtimeEnv.JWT_SECRET || process.env.JWT_SECRET || "",
+    SESSION_SECRET: runtimeEnv.SESSION_SECRET || process.env.SESSION_SECRET || "",
   } as Env;
 }
 
