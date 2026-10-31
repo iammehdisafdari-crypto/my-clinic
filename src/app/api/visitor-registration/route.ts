@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       "surgeon_name", "national_id", "created_by"
     ];
     const patientValues = [
-      today, first_name, last_name, phone, father_name, age, marital_status,
+      today, today, first_name, last_name, phone, father_name, age, marital_status,
       referral_source, surgery_type, surgeon_name, national_id || null, user.uid
     ];
     const placeholders = [
