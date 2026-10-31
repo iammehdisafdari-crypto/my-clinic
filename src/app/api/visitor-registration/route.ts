@@ -19,7 +19,9 @@ function isRealDate(value: string) {
 export async function POST(request: Request) {
   const { user, error } = await guard("patients:create", request);
   if (error) return error;
-  if (user.role !== "visitor") {
+  const appointmentPermission = await guard("appointments:write", request);
+  if (appointmentPermission.error) return appointmentPermission.error;
+  if (user.role !== "visitor" || appointmentPermission.user.uid !== user.uid) {
     return Response.json({ error: "این عملیات فقط در دسترس نقش ویزیتور است." }, { status: 403 });
   }
 
