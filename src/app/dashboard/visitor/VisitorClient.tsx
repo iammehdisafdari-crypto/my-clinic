@@ -81,9 +81,8 @@ export default function VisitorClient() {
     const response = await fetch("/api/appointments?date=" + encodeURIComponent(date) + "&type=consultation");
     if (response.ok) {
       const rows = await response.json();
-      setBookedTimes(rows.filter((item: { status: string; attendance_status?: string }) =>
-        item.status !== "cancelled" && item.attendance_status !== "no_show"
-      ).map((item: { appointment_time: string }) => item.appointment_time));
+      // The legacy unique slot constraint still reserves cancelled slots; mirror it in the picker.
+      setBookedTimes(rows.map((item: { appointment_time: string }) => item.appointment_time));
     }
   }
 
