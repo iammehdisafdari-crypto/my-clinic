@@ -13,7 +13,7 @@ export default async function VisitorDashboard() {
           ثبت‌نام بیماران جدید و رزرو نوبت مشاوره بر اساس تقویم و ساعت‌های آزاد.
         </p>
       </div>
-      <VisitorClient />
+      <VisitorClient isVisitor={user.role === "visitor"} />
     </div>
   );
 }
