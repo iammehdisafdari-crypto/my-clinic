@@ -90,14 +90,22 @@ export async function POST(request: Request) {
 
     const results = await db.batch([patientInsert, appointmentInsert]);
     const patientId = results[0]?.meta?.last_row_id;
-    const appointmentId = results[1]?.meta?.last_row_id;
-    if (!patientId || !appointmentId) {
-      return Response.json({ error: "ثبت بیمار و مراجعه کامل نشد؛ دوباره تلاش کنید" }, { status: 500 });
+    if (!patientId) {
+      return Response.json({ error: "ثبت پرونده بیمار تأیید نشد؛ دوباره تلاش کنید" }, { status: 500 });
     }
     const patient = await db.prepare(
       "SELECT id, daily_number, first_name, last_name FROM patients WHERE id = ?"
     ).bind(patientId).first();
-    return Response.json({ ok: true, patient, appointment_id: appointmentId }, { status: 201 });
+    const appointment = await db.prepare(
+      `SELECT id FROM appointments
+       WHERE patient_id = ? AND created_by = ? AND type = 'consultation'
+         AND appointment_date = ? AND appointment_time = ?
+       ORDER BY id DESC LIMIT 1`
+    ).bind(patientId, user.uid, appointment_date, appointment_time).first<{ id: number }>();
+    if (!patient || !appointment) {
+      return Response.json({ error: "ثبت پرونده و نوبت کامل تأیید نشد؛ با پشتیبانی تماس بگیرید" }, { status: 500 });
+    }
+    return Response.json({ ok: true, patient, appointment_id: appointment.id }, { status: 201 });
   } catch (err: any) {
     console.error("VISITOR_REGISTRATION_ERROR:", err);
     const message = String(err?.message || "");
