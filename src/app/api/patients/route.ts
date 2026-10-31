@@ -104,16 +104,18 @@ export async function POST(request: Request) {
     let patientId: number;
     if (hasAppointment) {
       // D1 batch is transactional: a slot conflict rolls back the patient insert too.
-      await db.batch([
+      const batchResults = await db.batch([
         patientInsert,
         db.prepare(
           "INSERT INTO appointments (patient_id, type, appointment_date, appointment_time, description, created_by) " +
           "VALUES (last_insert_rowid(), 'consultation', ?, ?, 'ثبت‌شده توسط ویزیتور', ?)"
         ).bind(appointment_date, appointment_time, user.uid),
       ]);
+      const insertedPatientId = batchResults[0]?.meta?.last_row_id;
+      if (!insertedPatientId) throw new Error("Patient insert did not return an id");
       const row = await db.prepare(
-        "SELECT id, daily_number, admission_date FROM patients WHERE created_by = ? AND phone = ? ORDER BY id DESC LIMIT 1"
-      ).bind(user.uid, phone).first<{ id: number; daily_number: number; admission_date: string }>();
+        "SELECT id, daily_number, admission_date FROM patients WHERE id = ?"
+      ).bind(insertedPatientId).first<{ id: number; daily_number: number; admission_date: string }>();
       if (!row) throw new Error("Patient row missing after transactional insert");
       return Response.json({
         ok: true,
@@ -129,6 +131,10 @@ export async function POST(request: Request) {
     return Response.json({ ok: true, patient: row }, { status: 201 });
   } catch (err) {
     console.error("PATIENT_CREATE_ERROR:", err);
+    const message = err instanceof Error ? err.message : "";
+    if (hasAppointment && /unique|constraint/i.test(message)) {
+      return Response.json({ error: "این ساعت قبلاً رزرو شده است. بیمار ثبت نشد؛ لطفاً زمان دیگری انتخاب کنید." }, { status: 409 });
+    }
     return Response.json({ error: "ثبت بیمار انجام نشد. دوباره تلاش کنید" }, { status: 500 });
   }
 }
