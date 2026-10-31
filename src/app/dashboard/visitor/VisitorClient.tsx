@@ -15,13 +15,16 @@ const TIME_SLOTS = [
   "16:00", "16:30", "17:00", "17:30", "18:00"
 ];
 
-export default function VisitorClient() {
+export default function VisitorClient({ isVisitor = false }: { isVisitor?: boolean }) {
   // فرم بیمار
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [surgeryType, setSurgeryType] = useState("");
   const [notes, setNotes] = useState("");
+  const [appointmentDate, setAppointmentDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }));
+  const [appointmentTime, setAppointmentTime] = useState("");
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
   
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -34,6 +37,19 @@ export default function VisitorClient() {
   
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // دریافت ساعت‌های رزروشده فقط برای فرم ثبت ویزیتور
+  useEffect(() => {
+    if (!isVisitor) return;
+    const fetchBookedTimes = async () => {
+      const res = await fetch(`/api/appointments?date=${appointmentDate}&type=consultation`);
+      if (res.ok) {
+        const data = await res.json();
+        setBookedTimes(data.map((item: any) => item.appointment_time).filter(Boolean));
+      }
+    };
+    fetchBookedTimes();
+  }, [appointmentDate, isVisitor]);
 
   // جستجوی بیماران برای انتخاب جهت نوبت مشاوره
   useEffect(() => {
@@ -60,6 +76,11 @@ export default function VisitorClient() {
   async function handleRegisterPatient(e: React.FormEvent) {
     e.preventDefault();
     setMsg("");
+    if (isVisitor && (!appointmentDate || !appointmentTime)) {
+      setMsg("لطفاً تاریخ و ساعت مشاوره را انتخاب کنید.");
+      return;
+    }
+
     setLoading(true);
 
     const res = await fetch("/api/patients", {
@@ -78,7 +99,29 @@ export default function VisitorClient() {
     setLoading(false);
 
     if (res.ok && data.patient) {
-      setMsg(`بیمار با موفقیت ثبت شد. شماره پرونده: ${data.patient.daily_number}`);
+      if (isVisitor) {
+        const appointmentRes = await fetch("/api/appointments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patient_id: data.patient.id,
+            type: "consultation",
+            appointment_date: appointmentDate,
+            appointment_time: appointmentTime,
+            description: "ثبت‌شده توسط ویزیتور",
+          }),
+        });
+        const appointmentData = await appointmentRes.json().catch(() => ({}));
+        if (!appointmentRes.ok) {
+          setLoading(false);
+          setMsg(`بیمار ثبت شد (پرونده ${data.patient.daily_number}) اما نوبت ثبت نشد: ${appointmentData.error || "خطا در ثبت نوبت"}`);
+          return;
+        }
+        setBookedTimes((prev) => [...prev, appointmentTime]);
+      }
+      setMsg(isVisitor
+        ? `بیمار و نوبت مشاوره با موفقیت ثبت شدند. شماره پرونده: ${data.patient.daily_number} | ${appointmentDate} ساعت ${appointmentTime}`
+        : `بیمار با موفقیت ثبت شد. شماره پرونده: ${data.patient.daily_number}`);
       setSelectedPatient({
         id: data.patient.id,
         daily_number: data.patient.daily_number,
@@ -91,6 +134,7 @@ export default function VisitorClient() {
       setPhone("");
       setSurgeryType("");
       setNotes("");
+      if (isVisitor) setAppointmentTime("");
     } else {
       setMsg(data.error || "خطا در ثبت بیمار");
     }
@@ -145,8 +189,25 @@ export default function VisitorClient() {
           <input className={inputClass} placeholder="شماره موبایل (۰۹...) *" value={phone} onChange={(e) => setPhone(e.target.value)} required />
           <input className={inputClass} placeholder="نوع جراحی پیشنهادی" value={surgeryType} onChange={(e) => setSurgeryType(e.target.value)} />
           <textarea className={inputClass} rows={2} placeholder="توضیحات بازاریابی یا منبع جذب" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          <button disabled={loading} className="w-full bg-brand-green text-white font-bold p-3 rounded-xl transition-transform active:scale-95">
-            {loading ? "در حال ثبت..." : "ثبت و انتخاب برای نوبت‌دهی"}
+          {isVisitor && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-gray-700">تاریخ مشاوره *</label>
+                <input type="date" className={inputClass} value={appointmentDate} onChange={(e) => { setAppointmentDate(e.target.value); setAppointmentTime(""); }} required />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-gray-700">ساعت مشاوره *</label>
+                <select className={inputClass} value={appointmentTime} onChange={(e) => setAppointmentTime(e.target.value)} required>
+                  <option value="">انتخاب ساعت</option>
+                  {["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"].map((time) => (
+                    <option key={time} value={time} disabled={bookedTimes.includes(time)}>{time}{bookedTimes.includes(time) ? " (رزرو شده)" : ""}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+          <button disabled={loading || (isVisitor && (!appointmentDate || !appointmentTime || bookedTimes.includes(appointmentTime)))} className="w-full bg-brand-green text-white font-bold p-3 rounded-xl transition-transform active:scale-95">
+            {loading ? "در حال ثبت..." : isVisitor ? "ثبت بیمار و نوبت مشاوره" : "ثبت و انتخاب برای نوبت‌دهی"}
           </button>
         </form>
 
