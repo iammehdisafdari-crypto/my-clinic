@@ -106,9 +106,11 @@ export async function PUT(request: Request) {
   const id = Number(b.id);
   const appointment_date = toEnDigits(normText(b.appointment_date));
   const appointment_time = toEnDigits(normText(b.appointment_time));
+  const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const allowedTimes = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
   if (!Number.isInteger(id) || id <= 0 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(appointment_date) ||
-      !/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time)) {
+      !/^\d{4}-\d{2}-\d{2}$/.test(appointment_date) || appointment_date < todayTehran ||
+      !allowedTimes.includes(appointment_time)) {
     return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست" }, { status: 400 });
   }
 
