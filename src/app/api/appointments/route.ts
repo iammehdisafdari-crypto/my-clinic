@@ -22,11 +22,11 @@ export async function GET(request: Request) {
                 a.status, a.type, a.description, p.first_name, p.last_name, p.phone
          FROM appointments a
          JOIN patients p ON p.id = a.patient_id
-         WHERE a.created_by = ?
+         WHERE a.created_by = ? AND a.type = ?
          ORDER BY a.appointment_date DESC, a.appointment_time DESC
          LIMIT 100`
       )
-      .bind(user.uid)
+      .bind(user.uid, type)
       .all();
 
     return Response.json(results);
