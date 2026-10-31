@@ -39,10 +39,12 @@ function toEn(s: string) {
   canWrite,
   canRefer,
   initialQ,
+  isVisitor,
 }: {
   canWrite: boolean;
   canRefer: boolean;
   initialQ: string;
+  isVisitor: boolean;
 }) {
   const [form, setForm] = useState(EMPTY);
   const [msg, setMsg] = useState("");
@@ -53,6 +55,24 @@ function toEn(s: string) {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [referringId, setReferringId] = useState<number | null>(null);
   const [referFeedback, setReferFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [appointmentDate, setAppointmentDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }));
+  const [appointmentTime, setAppointmentTime] = useState("");
+  const [bookedTimes, setBookedTimes] = useState<string[]>([]);
+  const appointmentSlots = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
+
+  useEffect(() => {
+    if (!isVisitor || !appointmentDate) return;
+    let cancelled = false;
+    fetch(`/api/appointments?date=${appointmentDate}&type=consultation`)
+      .then(async (response) => response.ok ? response.json() : [])
+      .then((rows: Array<{ appointment_time?: string }>) => {
+        if (!cancelled) setBookedTimes(rows.map((row) => row.appointment_time).filter((time): time is string => Boolean(time)));
+      })
+      .catch(() => {
+        if (!cancelled) setBookedTimes([]);
+      });
+    return () => { cancelled = true; };
+  }, [appointmentDate, isVisitor]);
 
   async function refer(p: Patient) {
     if (referringId !== null) return;
@@ -91,6 +111,10 @@ function toEn(s: string) {
 
   async function save(force: boolean) {
     setMsg("");
+    if (isVisitor && (!appointmentDate || !appointmentTime || bookedTimes.includes(appointmentTime))) {
+      setMsg("لطفاً تاریخ و ساعت آزاد مشاوره را انتخاب کنید.");
+      return;
+    }
 
     // اگر این شماره موبایل قبلاً ثبت شده، اول هشدار می‌دهیم
     if (!force) {
@@ -113,13 +137,38 @@ function toEn(s: string) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
-    const data = (await r.json()) as { error?: string; patient?: { daily_number: number } };
-    setSaving(false);
+    const data = (await r.json()) as { error?: string; patient?: { id: number; daily_number: number } };
+
+    if (r.ok && data.patient && isVisitor) {
+      const appointmentResponse = await fetch("/api/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient_id: data.patient.id,
+          type: "consultation",
+          appointment_date: appointmentDate,
+          appointment_time: appointmentTime,
+          description: "ثبت‌شده توسط ویزیتور",
+        }),
+      });
+      const appointmentData = await appointmentResponse.json().catch(() => ({})) as { error?: string };
+      setSaving(false);
+      if (!appointmentResponse.ok) {
+        setMsg(`بیمار ثبت شد (پرونده ${data.patient.daily_number}) اما نوبت ثبت نشد: ${appointmentData.error || "خطا در ثبت نوبت"}`);
+        load(q);
+        return;
+      }
+      setBookedTimes((previous) => [...previous, appointmentTime]);
+      setAppointmentTime("");
+    } else {
+      setSaving(false);
+    }
 
     if (r.ok && data.patient) {
       setForm(EMPTY);
       setDupes([]);
-      setMsg(`بیمار ثبت شد. شماره پرونده امروز: ${data.patient.daily_number}`);
+      if (!isVisitor) setMsg(`بیمار ثبت شد. شماره پرونده امروز: ${data.patient.daily_number}`);
+      else setMsg(`بیمار و نوبت مشاوره با موفقیت ثبت شدند. شماره پرونده: ${data.patient.daily_number} | ${appointmentDate} ساعت ${appointmentTime}`);
       load(q);
     } else {
       setMsg(data.error || "خطا");
@@ -161,6 +210,33 @@ function toEn(s: string) {
           <input className={input} placeholder="نحوه آشنایی" {...f("referral_source")} />
           <textarea className={input + " md:col-span-3"} rows={2} placeholder="توضیحات" {...f("notes")} />
 
+          {isVisitor && (
+            <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-gray-700">تاریخ مشاوره *</label>
+                <input
+                  type="date"
+                  className={input}
+                  value={appointmentDate}
+                  min={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" })}
+                  onChange={(event) => { setAppointmentDate(event.target.value); setAppointmentTime(""); }}
+                  required
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="block text-sm font-bold text-gray-700">ساعت مشاوره *</label>
+                <select className={input} value={appointmentTime} onChange={(event) => setAppointmentTime(event.target.value)} required>
+                  <option value="">انتخاب ساعت</option>
+                  {appointmentSlots.map((time) => (
+                    <option key={time} value={time} disabled={bookedTimes.includes(time)}>
+                      {time}{bookedTimes.includes(time) ? " (رزرو شده)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {dupes.length > 0 && (
             <div className="md:col-span-3 bg-yellow-50 border border-yellow-200 rounded-2xl p-4 space-y-3">
               <p className="font-bold text-sm">این شماره موبایل قبلاً ثبت شده:</p>
@@ -180,7 +256,7 @@ function toEn(s: string) {
             </div>
           )}
 
-          <button disabled={saving} className="bg-brand-green text-white rounded-xl p-3 font-bold md:col-span-1">
+          <button disabled={saving || (isVisitor && (!appointmentDate || !appointmentTime || bookedTimes.includes(appointmentTime)))} className="bg-brand-green text-white rounded-xl p-3 font-bold md:col-span-1">
             {saving ? "در حال ثبت..." : "ثبت بیمار"}
           </button>
           {msg && <p className="md:col-span-3 text-sm text-gray-600">{msg}</p>}
