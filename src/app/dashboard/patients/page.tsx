@@ -1,10 +1,12 @@
 import { requireRole, can } from "@/lib/permissions";
+import { redirect } from "next/navigation";
 import PatientsClient from "./PatientsClient";
 
 export const runtime = "edge";
 
 export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader", "photographer"]);
+  if (user.role === "visitor") redirect("/dashboard/visitor");
   const { q } = await searchParams;
   return (
     <div className="space-y-6">
