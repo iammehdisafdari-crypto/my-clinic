@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import VisitorRegistrationForm from "./VisitorRegistrationForm";
 
 type Patient = {
   id: number;
@@ -16,6 +17,7 @@ const TIME_SLOTS = [
 ];
 
 export default function VisitorClient({ isVisitor = false }: { isVisitor?: boolean }) {
+  if (isVisitor) return <VisitorRegistrationForm />;
   // فرم بیمار
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
