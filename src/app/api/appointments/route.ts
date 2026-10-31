@@ -39,10 +39,10 @@ export async function GET(request: Request) {
     return Response.json({ error: "تاریخ نامعتبر است" }, { status: 400 });
   }
 
+  // Slot availability does not need patient-identifying information.
   const { results } = await db.prepare(
-    "SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.status, a.attendance_status, a.type, " +
-    "p.first_name, p.last_name, p.phone FROM appointments a JOIN patients p ON p.id = a.patient_id " +
-    "WHERE a.appointment_date = ? AND a.type = ? ORDER BY a.appointment_time ASC"
+    "SELECT id, appointment_date, appointment_time, status, attendance_status, type " +
+    "FROM appointments WHERE appointment_date = ? AND type = ? ORDER BY appointment_time ASC"
   ).bind(date, type).all();
   return Response.json(results);
 }
