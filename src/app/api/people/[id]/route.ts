@@ -6,7 +6,7 @@ export const runtime = "edge";
 type Context = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: Context) {
-  const { error } = await guard("patients:read");
+  const { user, error } = await guard("patients:read");
   if (error) return error;
   const id = Number((await context.params).id);
   if (!Number.isInteger(id) || id <= 0) return Response.json({ error: "شناسه شخص نامعتبر است" }, { status: 400 });
@@ -15,33 +15,37 @@ export async function GET(_request: Request, context: Context) {
   const person = await db.prepare(
     "SELECT id, lifecycle_stage, first_name, last_name, phone, landline, father_name, age, job, marital_status, " +
     "residence_area, surgery_type, referral_source, notes, profile_created_at, converted_at, admission_date, " +
-    "CASE WHEN lifecycle_stage = 'patient' THEN daily_number ELSE NULL END AS daily_number FROM patients WHERE id = ?"
+    "CASE WHEN lifecycle_stage = 'patient' THEN daily_number ELSE NULL END AS daily_number, created_by FROM patients WHERE id = ?"
   ).bind(id).first();
   if (!person) return Response.json({ error: "شخص پیدا نشد" }, { status: 404 });
 
+  const visitorOwnOnly = user.role === "visitor";
   const { results: appointments } = await db.prepare(
     "SELECT id, type, appointment_date, appointment_time, status, attendance_status, description, created_at " +
-    "FROM appointments WHERE patient_id = ? ORDER BY appointment_date DESC, appointment_time DESC LIMIT 100"
-  ).bind(id).all();
+    "FROM appointments WHERE patient_id = ?" + (visitorOwnOnly ? " AND created_by = ?" : "") +
+    " ORDER BY appointment_date DESC, appointment_time DESC LIMIT 100"
+  ).bind(...(visitorOwnOnly ? [id, user.uid] : [id])).all();
 
   const { results: events } = await db.prepare(
     "SELECT id, event_type, changed_fields, performed_by, created_at FROM person_events " +
-    "WHERE person_id = ? ORDER BY id DESC LIMIT 100"
-  ).bind(id).all();
+    "WHERE person_id = ?" + (visitorOwnOnly ? " AND performed_by = ?" : "") + " ORDER BY id DESC LIMIT 100"
+  ).bind(...(visitorOwnOnly ? [id, user.uid] : [id])).all();
 
   const { results: appointmentEvents } = await db.prepare(
     "SELECT e.id, e.appointment_id, e.event_type, e.old_date, e.old_time, e.new_date, e.new_time, " +
     "e.old_status, e.new_status, e.old_attendance_status, e.new_attendance_status, e.reason, e.performed_by, e.created_at " +
     "FROM appointment_events e JOIN appointments a ON a.id = e.appointment_id " +
-    "WHERE a.patient_id = ? ORDER BY e.id DESC LIMIT 200"
-  ).bind(id).all();
+    "WHERE a.patient_id = ?" + (visitorOwnOnly ? " AND a.created_by = ?" : "") +
+    " ORDER BY e.id DESC LIMIT 200"
+  ).bind(...(visitorOwnOnly ? [id, user.uid] : [id])).all();
 
   const patientRecord = await db.prepare(
     "SELECT id, created_at FROM patient_records WHERE patient_id = ?"
   ).bind(id).first();
 
   return Response.json({
-    person, appointments, events, appointment_events: appointmentEvents, has_patient_record: Boolean(patientRecord),
+    person: { ...person, can_edit: Number((person as { created_by?: number }).created_by) === Number(user.uid) },
+    appointments, events, appointment_events: appointmentEvents, has_patient_record: Boolean(patientRecord),
     patient_record_created_at: patientRecord?.created_at ?? null
   });
 }

@@ -13,6 +13,7 @@ type Person = {
   referral_source?: string | null;
   notes?: string | null;
   daily_number?: number | null;
+  can_edit?: boolean;
 };
 type Appointment = {
   id: number;
@@ -289,8 +290,10 @@ export default function VisitorClient() {
                 </div>
                 <button type="button" onClick={() => setSelectedPerson(null)} className="text-xs underline">تغییر شخص</button>
               </div>
-              <button type="button" onClick={() => setEditing(!editing)} className="text-xs underline font-bold">ویرایش اطلاعات پروفایل</button>
-              {editing && (
+              {selectedPerson.can_edit && (
+                <button type="button" onClick={() => setEditing(!editing)} className="text-xs underline font-bold">ویرایش اطلاعات پروفایل</button>
+              )}
+              {editing && selectedPerson.can_edit && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                   <input className={inputClass} value={editForm.first_name} onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })} placeholder="نام" />
                   <input className={inputClass} value={editForm.last_name} onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })} placeholder="نام خانوادگی" />

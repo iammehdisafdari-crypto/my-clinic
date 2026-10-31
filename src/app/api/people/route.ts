@@ -9,7 +9,7 @@ function todayTehran() {
 }
 
 export async function GET(request: Request) {
-  const { error } = await guard("patients:read");
+  const { user, error } = await guard("patients:read");
   if (error) return error;
 
   const params = new URL(request.url).searchParams;
@@ -35,13 +35,16 @@ export async function GET(request: Request) {
       "SELECT id, lifecycle_stage, first_name, last_name, phone, age, surgery_type, referral_source, notes, " +
       "profile_created_at, created_at, " +
       "CASE WHEN lifecycle_stage = 'patient' THEN daily_number ELSE NULL END AS daily_number, " +
-      "CASE WHEN lifecycle_stage = 'patient' THEN admission_date ELSE NULL END AS admission_date " +
+      "CASE WHEN lifecycle_stage = 'patient' THEN admission_date ELSE NULL END AS admission_date, created_by " +
       "FROM patients " + where + " ORDER BY id DESC LIMIT 100"
     )
     .bind(...values)
     .all();
 
-  return Response.json(results);
+  return Response.json(results.map((row: Record<string, unknown>) => {
+    const { created_by, ...person } = row;
+    return { ...person, can_edit: Number(created_by) === Number(user.uid) };
+  }));
 }
 
 export async function POST(request: Request) {
@@ -59,12 +62,15 @@ export async function POST(request: Request) {
   const db = getDB();
   if (body.confirm_duplicate !== true) {
     const { results } = await db.prepare(
-      "SELECT id, first_name, last_name, phone, lifecycle_stage FROM patients WHERE phone = ? ORDER BY id DESC LIMIT 10"
+      "SELECT id, first_name, last_name, phone, lifecycle_stage, created_by FROM patients WHERE phone = ? ORDER BY id DESC LIMIT 10"
     ).bind(phone).all();
     if (results.length) {
       return Response.json({
         error: "این شماره قبلاً ثبت شده است؛ شخص قبلی را انتخاب کنید یا ثبت شخص جدید را تأیید کنید.",
-        duplicates: results
+        duplicates: results.map((row: Record<string, unknown>) => {
+          const { created_by, ...person } = row;
+          return { ...person, can_edit: Number(created_by) === Number(user.uid) };
+        })
       }, { status: 409 });
     }
   }
@@ -111,7 +117,7 @@ export async function POST(request: Request) {
       "SELECT id, lifecycle_stage, first_name, last_name, phone, profile_created_at FROM patients WHERE id = ?"
     ).bind(result.meta.last_row_id).first();
 
-    return Response.json({ ok: true, person }, { status: 201 });
+    return Response.json({ ok: true, person: person ? { ...person, can_edit: true } : null }, { status: 201 });
   } catch (cause) {
     console.error("LEAD_CREATE_FAILED", cause);
     return Response.json({ error: "ثبت متقاضی انجام نشد. دوباره تلاش کنید." }, { status: 500 });
