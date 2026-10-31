@@ -37,7 +37,9 @@ export async function POST(request: Request) {
   if (!/^09\d{9}$/.test(phone)) return Response.json({ error: "شماره تماس باید ۱۱ رقم و با ۰۹ شروع شود" }, { status: 400 });
   if (national_id && !/^\d{10}$/.test(national_id)) return Response.json({ error: "کد ملی باید ۱۰ رقم باشد" }, { status: 400 });
   if (age !== null && (!Number.isInteger(age) || age < 1 || age > 120)) return Response.json({ error: "سن معتبر نیست" }, { status: 400 });
-  if (!validDate(appointment_date) || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time)) {
+  const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
+  const allowedTimes = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
+  if (!validDate(appointment_date) || appointment_date < todayTehran || !allowedTimes.includes(appointment_time)) {
     return Response.json({ error: "تاریخ و ساعت مراجعه معتبر نیست" }, { status: 400 });
   }
 
