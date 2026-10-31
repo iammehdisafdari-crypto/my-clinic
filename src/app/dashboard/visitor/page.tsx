@@ -1,10 +1,12 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/permissions";
 import VisitorClient from "./VisitorClient";
 
 export const runtime = "edge";
 
 export default async function VisitorDashboard() {
-  const user = await requireRole(["visitor", "manager", "doctor"]);
+  const user = await requireRole(["visitor"]);
+  if (user.role !== "visitor") redirect("/dashboard/manager");
   return (
     <div className="space-y-6">
       <div>
