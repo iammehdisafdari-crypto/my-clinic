@@ -55,10 +55,10 @@ export async function POST(request: Request) {
   if (hasAppointment && !can(user.role, "appointments:write")) {
     return Response.json({ error: "دسترسی ثبت نوبت ندارید." }, { status: 403 });
   }
-  if (hasAppointment && !/^\\d{4}-\\d{2}-\\d{2}$/.test(appointment_date)) {
+  if (hasAppointment && !/^\d{4}-\d{2}-\d{2}$/.test(appointment_date)) {
     return Response.json({ error: "تاریخ مراجعه نامعتبر است." }, { status: 400 });
   }
-  if (hasAppointment && !/^([01]\\d|2[0-3]):([0-5]\\d)$/.test(appointment_time)) {
+  if (hasAppointment && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time)) {
     return Response.json({ error: "ساعت مراجعه نامعتبر است." }, { status: 400 });
   }
 
