@@ -24,8 +24,6 @@ export default function VisitorClient() {
   const [notes, setNotes] = useState("");
   
   const [patients, setPatients] = useState<Patient[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
-  
   // نوبت‌دهی
   const [date, setDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" }));
   const [bookedTimes, setBookedTimes] = useState<string[]>([]);
@@ -89,6 +87,7 @@ export default function VisitorClient() {
   // به‌روزرسانی اسلات‌های رزروشده برای تاریخ انتخابی
   useEffect(() => {
     let active = true;
+    setBookedTimes([]);
     const fetchBooked = async () => {
       const res = await fetch(`/api/appointments?date=${date}&type=consultation`);
       if (res.ok) {
