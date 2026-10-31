@@ -107,8 +107,8 @@ export async function PUT(request: Request) {
   const appointment_date = toEnDigits(normText(b.appointment_date));
   const appointment_time = toEnDigits(normText(b.appointment_time));
   if (!Number.isInteger(id) || id <= 0 ||
-      !/^\\d{4}-\\d{2}-\\d{2}$/.test(appointment_date) ||
-      !/^([01]\\d|2[0-3]):([0-5]\\d)$/.test(appointment_time)) {
+      !/^\d{4}-\d{2}-\d{2}$/.test(appointment_date) ||
+      !/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time)) {
     return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست" }, { status: 400 });
   }
 
