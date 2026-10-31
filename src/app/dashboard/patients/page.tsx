@@ -14,6 +14,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
         initialQ={q ?? ""}
         canWrite={can(user.role, "patients:write")}
         canRefer={can(user.role, "visits:refer")}
+        isVisitor={user.role === "visitor"}
       />
     </div>
   );
