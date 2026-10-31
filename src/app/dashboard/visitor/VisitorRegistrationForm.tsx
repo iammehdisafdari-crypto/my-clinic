@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { toJalaali, toGregorian, jalaaliMonthLength } from "jalaali-js";
 
 type Appointment = {
   id: number;
@@ -15,6 +16,50 @@ type Appointment = {
 const TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
 const input = "w-full rounded-xl border border-gray-200 bg-white p-3 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/10";
+const JALALI_MONTHS = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+const faNumber = (n: number) => n.toLocaleString("fa-IR");
+function isoToJalali(value: string) {
+  const [gy, gm, gd] = value.split("-").map(Number);
+  return toJalaali(gy, gm, gd);
+}
+function jalaliToIso(jy: number, jm: number, jd: number) {
+  const g = toGregorian(jy, jm, jd);
+  return `${g.gy}-${String(g.gm).padStart(2,"0")}-${String(g.gd).padStart(2,"0")}`;
+}
+function formatJalaliDate(value: string) {
+  if (!value) return "—";
+  const j = isoToJalali(value);
+  return `${faNumber(j.jy)}/${faNumber(j.jm).padStart(2,"۰")}/${faNumber(j.jd).padStart(2,"۰")}`;
+}
+function JalaliDateField({ value, onChange, minDate }: { value: string; onChange: (value: string) => void; minDate?: string }) {
+  const initial = isoToJalali(value || today());
+  const [parts, setParts] = useState({ jy: initial.jy, jm: initial.jm, jd: initial.jd });
+  useEffect(() => {
+    const j = isoToJalali(value || today());
+    setParts({ jy: j.jy, jm: j.jm, jd: j.jd });
+  }, [value]);
+  const currentYear = isoToJalali(today()).jy;
+  const days = jalaaliMonthLength(parts.jy, parts.jm);
+  function update(next: { jy: number; jm: number; jd: number }) {
+    const safe = { ...next, jd: Math.min(next.jd, jalaaliMonthLength(next.jy, next.jm)) };
+    setParts(safe);
+    const iso = jalaliToIso(safe.jy, safe.jm, safe.jd);
+    if (!minDate || iso >= minDate) onChange(iso);
+  }
+  const selectClass = input + " min-w-0";
+  return <div className="grid grid-cols-3 gap-2" dir="rtl">
+    <select aria-label="روز" className={selectClass} value={parts.jd} onChange={e => update({ ...parts, jd: Number(e.target.value) })}>
+      {Array.from({ length: days }, (_, i) => i + 1).map(day => <option key={day} value={day}>{faNumber(day)}</option>)}
+    </select>
+    <select aria-label="ماه" className={selectClass} value={parts.jm} onChange={e => update({ ...parts, jm: Number(e.target.value) })}>
+      {JALALI_MONTHS.map((month, i) => <option key={month} value={i + 1}>{month}</option>)}
+    </select>
+    <select aria-label="سال" className={selectClass} value={parts.jy} onChange={e => update({ ...parts, jy: Number(e.target.value) })}>
+      {Array.from({ length: 5 }, (_, i) => currentYear - 1 + i).map(year => <option key={year} value={year}>{faNumber(year)}</option>)}
+    </select>
+  </div>;
+}
+
 
 export default function VisitorRegistrationForm() {
   const [form, setForm] = useState({
@@ -158,7 +203,7 @@ export default function VisitorRegistrationForm() {
               <input className={input} value={form.surgeon_name} onChange={e => change("surgeon_name",e.target.value)} />
             </label>
             <label className="space-y-1.5 text-sm font-bold">تاریخ مراجعه *
-              <input className={input} type="date" min={today()} value={form.appointment_date} onChange={e => { setForm(v => ({...v,appointment_date:e.target.value,appointment_time:""})); }} required />
+              <JalaliDateField value={form.appointment_date} minDate={today()} onChange={date => setForm(v => ({...v,appointment_date:date,appointment_time:""}))} />
             </label>
             <label className="space-y-1.5 text-sm font-bold">ساعت مراجعه *
               <select className={input} value={form.appointment_time} onChange={e => change("appointment_time",e.target.value)} required>
@@ -186,7 +231,7 @@ export default function VisitorRegistrationForm() {
               <div>
                 <p className="font-bold">{item.first_name} {item.last_name}</p>
                 <p className="mt-1 text-sm text-gray-500" dir="ltr">{item.phone}</p>
-                <p className="mt-1 text-sm text-gray-600">{item.appointment_date} — {item.appointment_time}</p>
+                <p className="mt-1 text-sm text-gray-600">{formatJalaliDate(item.appointment_date)} — {item.appointment_time}</p>
               </div>
               {(item.status === "pending" || item.status === "confirmed") && <button type="button" onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50">تغییر تاریخ و ساعت</button>}
             </div>
@@ -201,7 +246,7 @@ export default function VisitorRegistrationForm() {
             <h3 className="text-lg font-black">ویرایش زمان مراجعه</h3>
             <p className="text-sm text-gray-600">{editing.first_name} {editing.last_name}</p>
             <label className="block space-y-1 text-sm font-bold">تاریخ جدید
-              <input type="date" className={input} min={today()} value={editDate} onChange={e => { setEditDate(e.target.value); setEditTime(""); }} />
+              <JalaliDateField value={editDate} minDate={today()} onChange={date => { setEditDate(date); setEditTime(""); }} />
             </label>
             <label className="block space-y-1 text-sm font-bold">ساعت جدید
               <select className={input} value={editTime} onChange={e => setEditTime(e.target.value)}>
