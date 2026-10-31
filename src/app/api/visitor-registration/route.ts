@@ -44,7 +44,7 @@ export async function POST(request: Request) {
   const db = getDB();
   try {
     // سازگاری با دیتابیس‌های قدیمی و جدید؛ فقط ستون‌های فاقد schema اضافه می‌شوند.
-    let info = await db.prepare("PRAGMA table_info(patients)").all<{ name: string }>();
+    let info = await db.prepare("PRAGMA table_info(patients)").all<{ name: string; notnull: number }>();
     let columnNames = new Set((info.results ?? []).map((column) => column.name));
     if (!columnNames.has("national_id")) {
       await db.prepare("ALTER TABLE patients ADD COLUMN national_id TEXT").run();
