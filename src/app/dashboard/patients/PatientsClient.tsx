@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, LoaderCircle, Stethoscope, TriangleAlert, X } from "lucide-react";
+import { CheckCircle2, FileText, LoaderCircle, Stethoscope, TriangleAlert, X } from "lucide-react";
 
 type Patient = {
   id: number;
@@ -12,6 +12,13 @@ type Patient = {
   age: number | null;
   job: string | null;
   surgery_type: string | null;
+  landline: string | null;
+  father_name: string | null;
+  marital_status: string | null;
+  residence_area: string | null;
+  referral_source: string | null;
+  notes: string | null;
+  created_at: string | null;
 };
 
 const EMPTY = {
@@ -51,6 +58,7 @@ function toEn(s: string) {
   const [list, setList] = useState<Patient[]>([]);
   const [saving, setSaving] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [viewingPatient, setViewingPatient] = useState<Patient | null>(null);
   const [referringId, setReferringId] = useState<number | null>(null);
   const [referFeedback, setReferFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -218,6 +226,7 @@ function toEn(s: string) {
                 <th className="p-3">موبایل</th>
                 <th className="p-3">سن</th>
                 <th className="p-3">نوع جراحی</th>
+                <th className="p-3 text-center">پرونده</th>
                 {canRefer && <th className="p-3 text-center">اقدام</th>}
               </tr>
             </thead>
@@ -230,6 +239,17 @@ function toEn(s: string) {
                   <td className="p-3 text-sm font-mono">{p.phone}</td>
                   <td className="p-3 text-sm">{p.age ?? "-"}</td>
                   <td className="p-3 text-sm">{p.surgery_type || "-"}</td>
+                  <td className="p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setViewingPatient(p)}
+                      className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50"
+                      aria-label={`مشاهده پرونده ${p.first_name} ${p.last_name}`}
+                    >
+                      <FileText size={16} />
+                      مشاهده پرونده
+                    </button>
+                  </td>
                   {canRefer && (
                     <td className="p-3">
                       <button
@@ -251,7 +271,7 @@ function toEn(s: string) {
               ))}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={canRefer ? 7 : 6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
+                  <td colSpan={canRefer ? 8 : 7} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
                 </tr>
               )}
             </tbody>
@@ -343,6 +363,58 @@ function toEn(s: string) {
                 {referringId === selectedPatient.id ? <LoaderCircle size={17} className="animate-spin" /> : <Stethoscope size={17} />}
                 {referringId === selectedPatient.id ? "در حال ارجاع..." : "تأیید و ارجاع"}
               </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {viewingPatient && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setViewingPatient(null);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="patient-record-title"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-gray-100 bg-white shadow-2xl"
+          >
+            <div className="sticky top-0 flex items-start justify-between border-b border-gray-100 bg-white px-6 py-5">
+              <div>
+                <h2 id="patient-record-title" className="text-lg font-black text-gray-900">پرونده بیمار</h2>
+                <p className="mt-1 text-sm text-gray-500">{viewingPatient.first_name} {viewingPatient.last_name} · شماره پرونده {viewingPatient.daily_number.toLocaleString("fa-IR")}</p>
+              </div>
+              <button type="button" aria-label="بستن پرونده" onClick={() => setViewingPatient(null)} className="rounded-xl p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700">
+                <X size={19} />
+              </button>
+            </div>
+            <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2">
+              {[
+                ["نام", viewingPatient.first_name],
+                ["نام خانوادگی", viewingPatient.last_name],
+                ["شماره پرونده روز", viewingPatient.daily_number.toLocaleString("fa-IR")],
+                ["تاریخ پذیرش", viewingPatient.admission_date],
+                ["شماره موبایل", viewingPatient.phone],
+                ["شماره ثابت", viewingPatient.landline],
+                ["نام پدر", viewingPatient.father_name],
+                ["سن", viewingPatient.age == null ? null : String(viewingPatient.age)],
+                ["شغل", viewingPatient.job],
+                ["وضعیت تأهل", viewingPatient.marital_status],
+                ["محدوده سکونت", viewingPatient.residence_area],
+                ["نوع جراحی", viewingPatient.surgery_type],
+                ["نحوه آشنایی", viewingPatient.referral_source],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4">
+                  <p className="text-xs font-medium text-gray-500">{label}</p>
+                  <p className="mt-1 break-words text-sm font-bold text-gray-900">{value || "ثبت نشده"}</p>
+                </div>
+              ))}
+              <div className="rounded-2xl border border-gray-100 bg-gray-50/70 p-4 sm:col-span-2">
+                <p className="text-xs font-medium text-gray-500">توضیحات</p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-7 text-gray-900">{viewingPatient.notes || "توضیحی ثبت نشده است."}</p>
+              </div>
             </div>
           </section>
         </div>
