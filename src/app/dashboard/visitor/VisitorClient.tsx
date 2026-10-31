@@ -18,6 +18,11 @@ const TIME_SLOTS = [
 
 export default function VisitorClient({ isVisitor = false }: { isVisitor?: boolean }) {
   if (isVisitor) return <VisitorRegistrationForm />;
+  return <LegacyVisitorClient />;
+}
+
+function LegacyVisitorClient() {
+  const isVisitor = false;
   // فرم بیمار
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
