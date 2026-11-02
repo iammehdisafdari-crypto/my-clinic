@@ -5,18 +5,20 @@ import VisitorRegistrationForm from "../visitor/VisitorRegistrationForm";
 export const runtime = "edge";
 
 export default async function PatientsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "uploader", "photographer"]);
+  const user = await requireRole(["manager", "doctor", "scheduler", "visitor", "nurse", "admission", "uploader", "photographer"]);
   const { q } = await searchParams;
-  const isVisitor = user.role === "visitor";
+  const appointmentRoles = ["visitor", "admission", "scheduler", "nurse", "admin", "manager"];
+  const usesAppointmentForm = appointmentRoles.includes(user.role);
+  const canManageAllAppointments = user.role !== "visitor";
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-black">بیماران</h1>
-      {isVisitor && <VisitorRegistrationForm />}
+      {usesAppointmentForm && <VisitorRegistrationForm canManageAll={canManageAllAppointments} />}
       <PatientsClient
         key={q ?? ""}
         initialQ={q ?? ""}
-        canWrite={!isVisitor && can(user.role, "patients:write")}
+        canWrite={!usesAppointmentForm && can(user.role, "patients:write")}
         canRefer={can(user.role, "visits:refer")}
       />
     </div>
