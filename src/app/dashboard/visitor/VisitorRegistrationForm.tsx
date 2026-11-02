@@ -13,7 +13,7 @@ type Appointment = {
   phone: string;
 };
 
-const TIMES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
+const TIMES = Array.from({ length: 13 }, (_, i) => { const minutes = 18 * 60 + i * 10; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; });
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
 const input = "w-full rounded-xl border border-gray-200 bg-white p-3 text-sm outline-none focus:border-brand-green focus:ring-2 focus:ring-brand-green/10";
 const JALALI_MONTHS = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
@@ -61,7 +61,7 @@ function JalaliDateField({ value, onChange, minDate }: { value: string; onChange
 }
 
 
-export default function VisitorRegistrationForm() {
+export default function VisitorRegistrationForm({ canManageAll = false }: { canManageAll?: boolean }) {
   const [form, setForm] = useState({
     first_name: "", last_name: "", father_name: "", age: "", phone: "",
     national_id: "", marital_status: "", referral_source: "",
@@ -77,7 +77,7 @@ export default function VisitorRegistrationForm() {
   const [editBooked, setEditBooked] = useState<string[]>([]);
 
   async function loadAppointments() {
-    const response = await fetch("/api/appointments?mine=1&type=consultation");
+    const response = await fetch(`/api/appointments?mine=${canManageAll ? "0" : "1"}&type=consultation`);
     if (response.ok) setAppointments(await response.json());
   }
 
@@ -222,8 +222,8 @@ export default function VisitorRegistrationForm() {
 
       <section className="rounded-3xl bg-white p-5 shadow-sm sm:p-7">
         <div className="mb-4">
-          <h2 className="text-lg font-black">مراجعه‌های ثبت‌شده توسط من</h2>
-          <p className="mt-1 text-sm text-gray-500">در صورت تغییر برنامه بیمار، تاریخ و ساعت نوبت‌های در انتظار را ویرایش کنید.</p>
+          <h2 className="text-lg font-black">مراجعه‌های ثبت‌شده</h2>
+          <p className="mt-1 text-sm text-gray-500">در صورت تغییر برنامه بیمار، تاریخ و ساعت نوبت را ویرایش کنید.</p>
         </div>
         <div className="space-y-3">
           {appointments.map(item => (
