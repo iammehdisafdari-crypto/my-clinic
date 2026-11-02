@@ -254,7 +254,7 @@ function toEn(s: string) {
                   {(canRefer || canViewRecord) && (
                     <td className="p-3"><div className="flex flex-wrap justify-center gap-2">
                       {canViewRecord && <button type="button" onClick={() => openRecord(p)} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"><Eye size={16} /> نمایش پرونده</button>}
-                      <button
+                      {canRefer && <button
                         type="button"
                         onClick={() => {
                           setReferFeedback(null);
