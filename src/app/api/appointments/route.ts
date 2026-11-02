@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const all = url.searchParams.get("mine") === "0" && ["admin", "manager", "admission", "scheduler", "nurse"].includes(user.role);
   const db = getDB();
 
-  if (mine) {
+  if (mine || all) {
     const { results } = await db
       .prepare(
         `SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time,
@@ -71,8 +71,9 @@ export async function POST(request: Request) {
     return Response.json({ error: "پرستار فقط می‌تواند نوبت خدمات پرستاری ثبت کند" }, { status: 403 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(appointment_date))
     return Response.json({ error: "تاریخ نامعتبر است" }, { status: 400 });
-  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(appointment_time))
-    return Response.json({ error: "ساعت نوبت نامعتبر است (فرمت HH:MM)" }, { status: 400 });
+  const allowedTimes = new Set(Array.from({ length: 13 }, (_, i) => { const minutes = 18 * 60 + i * 10; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; }));
+  if (!allowedTimes.has(appointment_time))
+    return Response.json({ error: "ساعت باید بین ۱۸:۰۰ تا ۲۰:۰۰ و در فاصله‌های ۱۰ دقیقه‌ای باشد." }, { status: 400 });
 
   const db = getDB();
 
