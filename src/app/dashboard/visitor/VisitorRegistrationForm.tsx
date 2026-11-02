@@ -61,7 +61,7 @@ function JalaliDateField({ value, onChange, minDate }: { value: string; onChange
 }
 
 
-export default function VisitorRegistrationForm({ canManageAll = false, canDeleteAppointments = false }: { canManageAll?: boolean; canDeleteAppointments?: boolean }) {
+export default function VisitorRegistrationForm({ canManageAll = false, canDeleteAppointments = false, canShowDeleteOption = false }: { canManageAll?: boolean; canDeleteAppointments?: boolean; canShowDeleteOption?: boolean }) {
   const [form, setForm] = useState({
     first_name: "", last_name: "", father_name: "", age: "", phone: "",
     national_id: "", marital_status: "", referral_source: "",
@@ -258,7 +258,7 @@ export default function VisitorRegistrationForm({ canManageAll = false, canDelet
               </div>
               <div className="flex flex-wrap gap-2">
                 {(item.status === "pending" || item.status === "confirmed") && <button type="button" disabled={loading} onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50">تغییر تاریخ و ساعت</button>}
-                {canDeleteAppointments && <button type="button" disabled={loading} onClick={() => deleteAppointment(item)} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">حذف نوبت</button>}
+                {canShowDeleteOption && <button type="button" disabled={loading || !canDeleteAppointments} title={canDeleteAppointments ? "حذف نوبت" : "حذف نوبت فقط توسط ادمین مجاز است"} onClick={() => deleteAppointment(item)} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50">حذف نوبت{!canDeleteAppointments ? " (فقط ادمین)" : ""}</button>}
               </div>
             </div>
           ))}
