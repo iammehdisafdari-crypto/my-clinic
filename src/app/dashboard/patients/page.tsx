@@ -14,7 +14,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-black">بیماران</h1>
-      {usesAppointmentForm && <VisitorRegistrationForm canManageAll={canManageAllAppointments} canDeleteAppointments={user.role === "admin"} />}
+      {usesAppointmentForm && <VisitorRegistrationForm canManageAll={canManageAllAppointments} canDeleteAppointments={user.role === "admin"} canShowDeleteOption={user.role === "admin" || user.role === "visitor"} />}
       <PatientsClient
         key={q ?? ""}
         initialQ={q ?? ""}
