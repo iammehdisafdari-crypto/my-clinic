@@ -23,7 +23,7 @@ export const HOME_BY_ROLE: Record<string, string> = {
 // API permissions. Keep legacy role names during the role migration so existing
 // accounts continue to work with the same access they had before.
 const ACTION_ROLES: Record<string, string[]> = {
-  "patients:read": ["admission", "nurse", "scheduler", "visitor", "uploader", "photographer"],
+  "patients:read": ["admin", "manager", "doctor", "admission", "nurse", "scheduler", "visitor", "uploader", "photographer"],
   "patients:record": ["doctor", "admission"],
   "patients:create": ["admission", "scheduler", "visitor", "nurse"],
   "patients:write": ["admission", "scheduler", "visitor"],
