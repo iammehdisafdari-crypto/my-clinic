@@ -39,11 +39,13 @@ function toEn(s: string) {
   canWrite,
   canRefer,
   canViewRecord,
+  canDeleteRecord,
   initialQ,
 }: {
   canWrite: boolean;
   canRefer: boolean;
   canViewRecord: boolean;
+  canDeleteRecord: boolean;
   initialQ: string;
 }) {
   const [form, setForm] = useState(EMPTY);
@@ -58,6 +60,8 @@ function toEn(s: string) {
   const [record, setRecord] = useState<Record<string, unknown> | null>(null);
   const [recordLoading, setRecordLoading] = useState(false);
   const [recordError, setRecordError] = useState("");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteFeedback, setDeleteFeedback] = useState("");
 
   async function openRecord(patient: Patient) {
     setRecord(null);
@@ -96,6 +100,26 @@ function toEn(s: string) {
       });
     } finally {
       setReferringId(null);
+    }
+  }
+
+
+  async function deletePatient(patient: Patient) {
+    if (!canDeleteRecord || deletingId !== null) return;
+    const confirmed = window.confirm(`پرونده «${patient.first_name} ${patient.last_name}» حذف شود؟ این عملیات قابل بازگشت نیست.`);
+    if (!confirmed) return;
+    setDeletingId(patient.id);
+    setDeleteFeedback("");
+    try {
+      const response = await fetch(`/api/patients/${patient.id}`, { method: "DELETE" });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error || "حذف پرونده انجام نشد.");
+      setDeleteFeedback(`پرونده ${patient.first_name} ${patient.last_name} حذف شد.`);
+      await load(q);
+    } catch (error) {
+      setDeleteFeedback(error instanceof Error ? error.message : "خطا در حذف پرونده.");
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -216,6 +240,7 @@ function toEn(s: string) {
           onChange={(e) => setQ(e.target.value)}
         />
         <p className="text-sm text-gray-400">{q ? "نتایج جستجو" : "بیماران امروز"}</p>
+        {deleteFeedback && <p role="status" className="rounded-xl bg-gray-50 p-3 text-sm text-gray-700">{deleteFeedback}</p>}
         {referFeedback && (
           <div
             role="status"
@@ -239,7 +264,7 @@ function toEn(s: string) {
                 <th className="p-3">موبایل</th>
                 <th className="p-3">سن</th>
                 <th className="p-3">نوع جراحی</th>
-                {(canRefer || canViewRecord) && <th className="p-3 text-center">اقدام</th>}
+                {(canRefer || canViewRecord || canDeleteRecord) && <th className="p-3 text-center">اقدام</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -251,9 +276,10 @@ function toEn(s: string) {
                   <td className="p-3 text-sm font-mono">{p.phone}</td>
                   <td className="p-3 text-sm">{p.age ?? "-"}</td>
                   <td className="p-3 text-sm">{p.surgery_type || "-"}</td>
-                  {(canRefer || canViewRecord) && (
+                  {(canRefer || canViewRecord || canDeleteRecord) && (
                     <td className="p-3"><div className="flex flex-wrap justify-center gap-2">
                       {canViewRecord && <button type="button" onClick={() => openRecord(p)} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"><Eye size={16} /> نمایش پرونده</button>}
+                      {canDeleteRecord && <button type="button" onClick={() => deletePatient(p)} disabled={deletingId !== null} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">{deletingId === p.id ? "در حال حذف..." : "حذف پرونده"}</button>}
                       {canRefer && <button
                         type="button"
                         onClick={() => {
@@ -273,7 +299,7 @@ function toEn(s: string) {
               ))}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={canRefer || canViewRecord ? 7 : 6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
+                  <td colSpan={canRefer || canViewRecord || canDeleteRecord ? 7 : 6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
                 </tr>
               )}
             </tbody>
