@@ -5,9 +5,7 @@ import { normText, toEnDigits } from "@/lib/normalize";
 export const runtime = "edge";
 
 const TIME_SLOTS = new Set([
-  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30", "18:00",
+  ...Array.from({ length: 13 }, (_, i) => { const minutes = 18 * 60 + i * 10; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; }),
 ]);
 
 function isRealDate(value: string) {
@@ -21,9 +19,7 @@ export async function POST(request: Request) {
   if (error) return error;
   const appointmentPermission = await guard("appointments:write", request);
   if (appointmentPermission.error) return appointmentPermission.error;
-  if (user.role !== "visitor" || appointmentPermission.user.uid !== user.uid) {
-    return Response.json({ error: "این عملیات فقط در دسترس نقش ویزیتور است." }, { status: 403 });
-  }
+  if (appointmentPermission.user.uid !== user.uid) return Response.json({ error: "احراز هویت درخواست معتبر نیست." }, { status: 403 });
 
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const first_name = normText(b.first_name);
