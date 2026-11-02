@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, LoaderCircle, Stethoscope, TriangleAlert, X } from "lucide-react";
+import { CheckCircle2, LoaderCircle, Stethoscope, TriangleAlert, X, Eye } from "lucide-react";
 
 type Patient = {
   id: number;
@@ -38,10 +38,12 @@ function toEn(s: string) {
   export default function PatientsClient({
   canWrite,
   canRefer,
+  canViewRecord,
   initialQ,
 }: {
   canWrite: boolean;
   canRefer: boolean;
+  canViewRecord: boolean;
   initialQ: string;
 }) {
   const [form, setForm] = useState(EMPTY);
@@ -53,6 +55,25 @@ function toEn(s: string) {
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [referringId, setReferringId] = useState<number | null>(null);
   const [referFeedback, setReferFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [record, setRecord] = useState<Record<string, unknown> | null>(null);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [recordError, setRecordError] = useState("");
+
+  async function openRecord(patient: Patient) {
+    setRecord(null);
+    setRecordError("");
+    setRecordLoading(true);
+    try {
+      const response = await fetch("/api/patients/" + patient.id);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "دریافت پرونده انجام نشد.");
+      setRecord(data as Record<string, unknown>);
+    } catch (error) {
+      setRecordError(error instanceof Error ? error.message : "خطا در دریافت پرونده.");
+    } finally {
+      setRecordLoading(false);
+    }
+  }
 
   async function refer(p: Patient) {
     if (referringId !== null) return;
@@ -218,7 +239,7 @@ function toEn(s: string) {
                 <th className="p-3">موبایل</th>
                 <th className="p-3">سن</th>
                 <th className="p-3">نوع جراحی</th>
-                {canRefer && <th className="p-3 text-center">اقدام</th>}
+                {(canRefer || canViewRecord) && <th className="p-3 text-center">اقدام</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -230,8 +251,9 @@ function toEn(s: string) {
                   <td className="p-3 text-sm font-mono">{p.phone}</td>
                   <td className="p-3 text-sm">{p.age ?? "-"}</td>
                   <td className="p-3 text-sm">{p.surgery_type || "-"}</td>
-                  {canRefer && (
-                    <td className="p-3">
+                  {(canRefer || canViewRecord) && (
+                    <td className="p-3"><div className="flex flex-wrap justify-center gap-2">
+                      {canViewRecord && <button type="button" onClick={() => openRecord(p)} className="inline-flex items-center gap-2 whitespace-nowrap rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-800 hover:bg-sky-100"><Eye size={16} /> نمایش پرونده</button>}
                       <button
                         type="button"
                         onClick={() => {
@@ -244,20 +266,40 @@ function toEn(s: string) {
                       >
                         <Stethoscope size={16} />
                         ارجاع به پزشک
-                      </button>
-                    </td>
+                      </button>}
+                    </div></td>
                   )}
                 </tr>
               ))}
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={canRefer ? 7 : 6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
+                  <td colSpan={canRefer || canViewRecord ? 7 : 6} className="p-6 text-center text-sm text-gray-400">موردی پیدا نشد</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {(recordLoading || recordError || record) && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
+          <section role="dialog" aria-modal="true" className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-black">پرونده بیمار</h2>
+              <button type="button" onClick={() => { setRecord(null); setRecordError(""); }} className="rounded-xl p-2 hover:bg-gray-100"><X size={20} /></button>
+            </div>
+            {recordLoading && <p className="py-8 text-center text-sm text-gray-500">در حال دریافت پرونده...</p>}
+            {recordError && <p role="alert" className="rounded-xl bg-red-50 p-4 text-sm text-red-700">{recordError}</p>}
+            {record && <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {Object.entries({ "شماره پرونده": record.daily_number, "تاریخ پذیرش": record.admission_date, "نام": record.first_name, "نام خانوادگی": record.last_name, "شماره تماس": record.phone, "شماره ثابت": record.landline, "نام پدر": record.father_name, "سن": record.age, "کد ملی": record.national_id, "وضعیت تأهل": record.marital_status, "شغل": record.job, "محدوده سکونت": record.residence_area, "نوع جراحی": record.surgery_type, "نام جراح": record.surgeon_name, "معرف": record.referral_source, "توضیحات": record.notes }).map(([label, value]) => (
+                <div key={label} className="rounded-xl border border-gray-100 p-3">
+                  <p className="text-xs text-gray-400">{label}</p><p className="mt-1 whitespace-pre-wrap text-sm font-bold text-gray-800">{value == null || value === "" ? "—" : String(value)}</p>
+                </div>
+              ))}
+            </div>}
+          </section>
+        </div>
+      )}
 
       {selectedPatient && (
         <div
