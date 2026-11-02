@@ -4,6 +4,12 @@ import { normText, toEnDigits } from "@/lib/normalize";
 
 export const runtime = "edge";
 
+function validDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(value + "T00:00:00Z");
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 // گرفتن نوبت‌ها یا اسلات‌های یک روز مشخص
 export async function GET(request: Request) {
   const { user, error } = await guard("patients:read");
@@ -109,7 +115,7 @@ export async function PUT(request: Request) {
   const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
   const allowedTimes = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"];
   if (!Number.isInteger(id) || id <= 0 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(appointment_date) || appointment_date < todayTehran ||
+      !validDate(appointment_date) || appointment_date < todayTehran ||
       !allowedTimes.includes(appointment_time)) {
     return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست" }, { status: 400 });
   }
