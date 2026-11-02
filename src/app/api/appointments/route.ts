@@ -126,3 +126,25 @@ export async function PUT(request: Request) {
     return Response.json({ error: "این ساعت قبلاً رزرو شده است. زمان دیگری انتخاب کنید." }, { status: 409 });
   }
 }
+
+
+// حذف نوبت فقط توسط ادمین؛ مالکیت یا ثبت‌کننده نوبت هیچ‌گونه مجوز حذفی ایجاد نمی‌کند.
+export async function DELETE(request: Request) {
+  const { user, error } = await guard("appointments:write", request);
+  if (error) return error;
+  if (user.role !== "admin") {
+    return Response.json({ error: "حذف نوبت فقط توسط ادمین مجاز است." }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    return Response.json({ error: "شناسه نوبت معتبر نیست." }, { status: 400 });
+  }
+
+  const result = await getDB().prepare("DELETE FROM appointments WHERE id = ?").bind(id).run();
+  if (!result.meta.changes) {
+    return Response.json({ error: "نوبت موردنظر پیدا نشد." }, { status: 404 });
+  }
+  return Response.json({ ok: true });
+}
