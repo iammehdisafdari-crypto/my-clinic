@@ -21,6 +21,7 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
         canWrite={!usesAppointmentForm && can(user.role, "patients:write")}
         canRefer={can(user.role, "visits:refer")}
         canViewRecord={["admin", "manager", "doctor", "admission"].includes(user.role)}
+        canDeleteRecord={["admin", "manager"].includes(user.role)}
       />
     </div>
   );
