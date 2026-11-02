@@ -14,12 +14,13 @@ export default async function PatientsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-black">بیماران</h1>
-      {usesAppointmentForm && <VisitorRegistrationForm canManageAll={canManageAllAppointments} canDeleteAppointments={user.role === "admin"} canShowDeleteOption={user.role === "admin" || user.role === "visitor"} />}
+      {usesAppointmentForm && <VisitorRegistrationForm canManageAll={canManageAllAppointments} canDeleteAppointments={user.role === "admin" || user.role === "visitor"} canShowDeleteOption={user.role === "admin" || user.role === "visitor"} />}
       <PatientsClient
         key={q ?? ""}
         initialQ={q ?? ""}
         canWrite={!usesAppointmentForm && can(user.role, "patients:write")}
         canRefer={can(user.role, "visits:refer")}
+        canViewRecord={["admin", "manager", "doctor", "admission"].includes(user.role)}
       />
     </div>
   );
