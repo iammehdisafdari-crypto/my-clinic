@@ -14,7 +14,7 @@ const COLS =
 
 // بدون q: بیماران امروز | با q: جستجو بر اساس نام، نام خانوادگی یا شماره
 export async function GET(request: Request) {
-  const { error } = await guard("patients:read");
+  const { user, error } = await guard("patients:read");
   if (error) return error;
 
   const q = normText(new URL(request.url).searchParams.get("q")).replace(/[%_]/g, "");
@@ -22,8 +22,8 @@ export async function GET(request: Request) {
 
   if (!q) {
     const { results } = await db
-      .prepare(`SELECT ${COLS} FROM patients WHERE admission_date = ? ORDER BY daily_number DESC LIMIT 100`)
-      .bind(todayTehran())
+      .prepare(`SELECT ${COLS} FROM patients WHERE admission_date = ? AND (? = 0 OR created_by = ?) ORDER BY daily_number DESC LIMIT 100`)
+      .bind(todayTehran(), user.role === "visitor" ? 1 : 0, user.uid)
       .all();
     return Response.json(results);
   }
@@ -32,13 +32,14 @@ export async function GET(request: Request) {
   const { results } = await db
     .prepare(
       `SELECT ${COLS} FROM patients
-       WHERE (first_name || ' ' || last_name) LIKE ?1
+       WHERE ((first_name || ' ' || last_name) LIKE ?1
           OR (last_name || ' ' || first_name) LIKE ?1
           OR phone LIKE ?1
-          OR landline LIKE ?1
+          OR landline LIKE ?1)
+          AND (?2 = 0 OR created_by = ?3)
        ORDER BY id DESC LIMIT 50`
     )
-    .bind(like)
+    .bind(like, user.role === "visitor" ? 1 : 0, user.uid)
     .all();
   return Response.json(results);
 }
