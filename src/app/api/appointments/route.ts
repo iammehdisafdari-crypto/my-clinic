@@ -38,10 +38,8 @@ export async function GET(request: Request) {
 
   const { results } = await db
     .prepare(
-      `SELECT a.id, a.patient_id, a.appointment_date, a.appointment_time, a.status, a.type,
-              p.first_name, p.last_name, p.phone
+      `SELECT a.id, a.appointment_time
        FROM appointments a
-       JOIN patients p ON p.id = a.patient_id
        WHERE a.appointment_date = ? AND a.type = ?
        ORDER BY a.appointment_time ASC`
     )
@@ -128,12 +126,12 @@ export async function PUT(request: Request) {
 }
 
 
-// حذف نوبت فقط توسط ادمین؛ مالکیت یا ثبت‌کننده نوبت هیچ‌گونه مجوز حذفی ایجاد نمی‌کند.
+// ادمین می‌تواند هر نوبتی را حذف کند؛ ویزیتور فقط نوبت ثبت‌شده توسط حساب خودش را.
 export async function DELETE(request: Request) {
   const { user, error } = await guard("appointments:write", request);
   if (error) return error;
-  if (user.role !== "admin") {
-    return Response.json({ error: "حذف نوبت فقط توسط ادمین مجاز است." }, { status: 403 });
+  if (user.role !== "admin" && user.role !== "visitor") {
+    return Response.json({ error: "فقط ادمین یا ثبت‌کننده نوبت مجاز به حذف آن هستند." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -142,7 +140,7 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "شناسه نوبت معتبر نیست." }, { status: 400 });
   }
 
-  const result = await getDB().prepare("DELETE FROM appointments WHERE id = ?").bind(id).run();
+  const result = await getDB().prepare("DELETE FROM appointments WHERE id = ? AND (? = 1 OR created_by = ?)").bind(id, user.role === "admin" ? 1 : 0, user.uid).run();
   if (!result.meta.changes) {
     return Response.json({ error: "نوبت موردنظر پیدا نشد." }, { status: 404 });
   }
