@@ -107,7 +107,7 @@ export async function PUT(request: Request) {
   const appointment_time = toEnDigits(normText(b.appointment_time));
   const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
   const allowedTimes = new Set(["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"]);
-  const validDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(appointment_date) && !Number.isNaN(new Date(appointment_date + "T00:00:00.000Z").getTime()) && new Date(appointment_date + "T00:00:00.000Z").toISOString().slice(0,10) === appointment_date;
+  const validDate = /^\d{4}-\d{2}-\d{2}$/.test(appointment_date) && !Number.isNaN(new Date(appointment_date + "T00:00:00.000Z").getTime()) && new Date(appointment_date + "T00:00:00.000Z").toISOString().slice(0,10) === appointment_date;
   if (!Number.isInteger(id) || id <= 0 || !validDate || appointment_date < todayTehran || !allowedTimes.has(appointment_time)) {
     return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست." }, { status: 400 });
   }
