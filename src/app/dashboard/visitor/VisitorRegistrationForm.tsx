@@ -61,7 +61,7 @@ function JalaliDateField({ value, onChange, minDate }: { value: string; onChange
 }
 
 
-export default function VisitorRegistrationForm({ canManageAll = false }: { canManageAll?: boolean }) {
+export default function VisitorRegistrationForm({ canManageAll = false, canDeleteAppointments = false }: { canManageAll?: boolean; canDeleteAppointments?: boolean }) {
   const [form, setForm] = useState({
     first_name: "", last_name: "", father_name: "", age: "", phone: "",
     national_id: "", marital_status: "", referral_source: "",
@@ -134,6 +134,29 @@ export default function VisitorRegistrationForm({ canManageAll = false }: { canM
       await loadAppointments();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "خطا در ثبت اطلاعات");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteAppointment(item: Appointment) {
+    if (!canDeleteAppointments || loading) return;
+    const confirmed = window.confirm(`آیا از حذف نوبت ${item.first_name} ${item.last_name} در تاریخ ${formatJalaliDate(item.appointment_date)} ساعت ${item.appointment_time} مطمئن هستید؟ این عملیات فقط نوبت را حذف می‌کند و اطلاعات بیمار باقی می‌ماند.`);
+    if (!confirmed) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/appointments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "حذف نوبت انجام نشد");
+      setMessage("نوبت با موفقیت حذف شد. اطلاعات بیمار حفظ شده است.");
+      await loadAppointments();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "خطا در حذف نوبت");
     } finally {
       setLoading(false);
     }
@@ -233,7 +256,10 @@ export default function VisitorRegistrationForm({ canManageAll = false }: { canM
                 <p className="mt-1 text-sm text-gray-500" dir="ltr">{item.phone}</p>
                 <p className="mt-1 text-sm text-gray-600">{formatJalaliDate(item.appointment_date)} — {item.appointment_time}</p>
               </div>
-              {(item.status === "pending" || item.status === "confirmed") && <button type="button" onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50">تغییر تاریخ و ساعت</button>}
+              <div className="flex flex-wrap gap-2">
+                {(item.status === "pending" || item.status === "confirmed") && <button type="button" disabled={loading} onClick={() => { setEditing(item); setEditDate(item.appointment_date); setEditTime(item.appointment_time); }} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold hover:bg-gray-50 disabled:opacity-50">تغییر تاریخ و ساعت</button>}
+                {canDeleteAppointments && <button type="button" disabled={loading} onClick={() => deleteAppointment(item)} className="rounded-xl border border-red-200 px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">حذف نوبت</button>}
+              </div>
             </div>
           ))}
           {appointments.length === 0 && <p className="py-6 text-center text-sm text-gray-400">هنوز مراجعه‌ای ثبت نشده است.</p>}
