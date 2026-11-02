@@ -13,6 +13,7 @@ export async function GET(request: Request) {
   const date = url.searchParams.get("date");
   const type = url.searchParams.get("type") || "consultation";
   const mine = url.searchParams.get("mine") === "1";
+  const all = url.searchParams.get("mine") === "0" && ["admin", "manager", "admission", "scheduler", "nurse"].includes(user.role);
   const db = getDB();
 
   if (mine) {
@@ -22,11 +23,11 @@ export async function GET(request: Request) {
                 a.status, a.type, a.description, p.first_name, p.last_name, p.phone
          FROM appointments a
          JOIN patients p ON p.id = a.patient_id
-         WHERE a.created_by = ?
+         WHERE (? = 1 OR a.created_by = ?)
          ORDER BY a.appointment_date DESC, a.appointment_time DESC
-         LIMIT 100`
+         LIMIT 200`
       )
-      .bind(user.uid)
+      .bind(all ? 1 : 0, user.uid)
       .all();
 
     return Response.json(results);
@@ -99,14 +100,15 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   const { user, error } = await guard("appointments:write", request);
   if (error) return error;
-  if (user.role !== "visitor") return Response.json({ error: "این عملیات فقط برای ویزیتور مجاز است." }, { status: 403 });
+  const canManageAny = ["admin", "manager", "admission", "scheduler", "nurse"].includes(user.role);
+  if (user.role !== "visitor" && !canManageAny) return Response.json({ error: "اجازه تغییر نوبت ندارید." }, { status: 403 });
 
   const b = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const id = Number(b.id);
   const appointment_date = toEnDigits(normText(b.appointment_date));
   const appointment_time = toEnDigits(normText(b.appointment_time));
   const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
-  const allowedTimes = new Set(["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00"]);
+  const allowedTimes = new Set(Array.from({ length: 13 }, (_, i) => { const minutes = 18 * 60 + i * 10; return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`; }));
   const validDate = /^\d{4}-\d{2}-\d{2}$/.test(appointment_date) && !Number.isNaN(new Date(appointment_date + "T00:00:00.000Z").getTime()) && new Date(appointment_date + "T00:00:00.000Z").toISOString().slice(0,10) === appointment_date;
   if (!Number.isInteger(id) || id <= 0 || !validDate || appointment_date < todayTehran || !allowedTimes.has(appointment_time)) {
     return Response.json({ error: "شناسه، تاریخ یا ساعت نوبت معتبر نیست." }, { status: 400 });
@@ -115,8 +117,8 @@ export async function PUT(request: Request) {
   try {
     const result = await getDB().prepare(
       `UPDATE appointments SET appointment_date = ?, appointment_time = ?
-       WHERE id = ? AND created_by = ? AND type = 'consultation' AND status IN ('pending', 'confirmed')`
-    ).bind(appointment_date, appointment_time, id, user.uid).run();
+       WHERE id = ? AND (? = 1 OR created_by = ?) AND type = 'consultation' AND status IN ('pending', 'confirmed')`
+    ).bind(appointment_date, appointment_time, id, canManageAny ? 1 : 0, user.uid).run();
     if (!result.meta.changes) return Response.json({ error: "نوبت پیدا نشد یا امکان ویرایش آن وجود ندارد." }, { status: 404 });
     return Response.json({ ok: true });
   } catch {
