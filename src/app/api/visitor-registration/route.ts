@@ -41,7 +41,7 @@ export async function POST(request: Request) {
 
   if (!first_name || !last_name) return Response.json({ error: "نام و نام خانوادگی را وارد کنید." }, { status: 400 });
   if (!/^09\d{9}$/.test(phone)) return Response.json({ error: "شماره موبایل باید ۱۱ رقم و با ۰۹ شروع شود." }, { status: 400 });
-  if (national_id && !/^\\d{10}$/.test(national_id)) return Response.json({ error: "کد ملی باید ۱۰ رقم باشد." }, { status: 400 });
+  if (national_id && !/^\d{10}$/.test(national_id)) return Response.json({ error: "کد ملی باید ۱۰ رقم باشد." }, { status: 400 });
   if (age !== null && (!Number.isInteger(age) || age < 1 || age > 120)) return Response.json({ error: "سن معتبر نیست." }, { status: 400 });
   const todayTehran = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Tehran" });
   if (!isRealDate(appointment_date) || appointment_date < todayTehran) return Response.json({ error: "تاریخ مراجعه معتبر نیست یا در گذشته قرار دارد." }, { status: 400 });
