@@ -97,7 +97,7 @@ export async function POST(request: Request) {
 
 // تغییر تاریخ و ساعت مراجعه فقط توسط ویزیتوری که نوبت را ثبت کرده است.
 export async function PUT(request: Request) {
-  const { user, error } = await guard("appointments:write", request);
+  const { user, error } = await guard("appointments:write");
   if (error) return error;
   const canManageAny = ["admin", "manager", "admission", "scheduler", "nurse"].includes(user.role);
   if (user.role !== "visitor" && !canManageAny) return Response.json({ error: "اجازه تغییر نوبت ندارید." }, { status: 403 });
@@ -128,10 +128,10 @@ export async function PUT(request: Request) {
 
 // ادمین می‌تواند هر نوبتی را حذف کند؛ ویزیتور فقط نوبت ثبت‌شده توسط حساب خودش را.
 export async function DELETE(request: Request) {
-  const { user, error } = await guard("appointments:write", request);
+  const { user, error } = await guard("appointments:write");
   if (error) return error;
-  if (user.role !== "admin" && user.role !== "visitor") {
-    return Response.json({ error: "فقط ادمین یا ثبت‌کننده نوبت مجاز به حذف آن هستند." }, { status: 403 });
+  if (user.role !== "admin" && user.role !== "manager" && user.role !== "visitor") {
+    return Response.json({ error: "فقط مدیر کل سیستم یا ثبت‌کننده نوبت مجاز به حذف آن هستند." }, { status: 403 });
   }
 
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -140,7 +140,7 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "شناسه نوبت معتبر نیست." }, { status: 400 });
   }
 
-  const result = await getDB().prepare("DELETE FROM appointments WHERE id = ? AND (? = 1 OR created_by = ?)").bind(id, user.role === "admin" ? 1 : 0, user.uid).run();
+  const result = await getDB().prepare("DELETE FROM appointments WHERE id = ? AND (? = 1 OR created_by = ?)").bind(id, (user.role === "admin" || user.role === "manager") ? 1 : 0, user.uid).run();
   if (!result.meta.changes) {
     return Response.json({ error: "نوبت موردنظر پیدا نشد." }, { status: 404 });
   }
